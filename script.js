@@ -296,18 +296,74 @@ async function addToTMDBList(listId, mediaId, session) {
 }
 
 /* ================================
-   LIST SELECTOR UI
+   LIST SELECTOR UI WITH ITEM DETECTION
 ================================ */
-function showListSelector(lists, callback) {
+async function showListSelector(lists, callback, currentMediaId, currentType) {
     const body = document.getElementById('modal-body');
     body.innerHTML = '<h3>Select List</h3>';
-    lists.forEach(list => {
+
+    // Trakt token and TMDB session
+    const traktToken = localStorage.getItem('trakt_token');
+    const tmdbSession = localStorage.getItem('tmdb_session');
+
+    for (const list of lists) {
         const btn = document.createElement('button');
         btn.className = 'list-btn';
-        btn.textContent = list.name;
+        let mediaTypeLabel = ''; // for TMDB lists
+
+        // Detect TMDB media type if it's a TMDB list
+        if (list.id && list.item_count !== undefined && tmdbSession) {
+            try {
+                const res = await fetch(`https://api.themoviedb.org/3/list/${list.id}?api_key=${TMDB_KEY}&session_id=${tmdbSession}`);
+                const listDetails = await res.json();
+                const types = new Set(listDetails.items.map(i => i.media_type));
+                if (types.size === 1) {
+                    mediaTypeLabel = types.has('movie') ? 'Movie List' : 'TV List';
+                } else {
+                    mediaTypeLabel = 'Mixed List';
+                }
+            } catch (err) {
+                console.warn('Error fetching TMDB list details:', err);
+                mediaTypeLabel = 'Mixed List';
+            }
+        }
+
+        // Detect if item exists in Trakt list
+        let alreadyAdded = false;
+        if (traktToken && list.ids?.slug) {
+            try {
+                const res = await fetch(`https://api.trakt.tv/users/me/lists/${list.ids.slug}/items/${currentType}/${currentMediaId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${traktToken}`,
+                        'trakt-api-version': '2',
+                        'trakt-api-key': TRAKT_ID
+                    }
+                });
+                alreadyAdded = res.status === 200;
+            } catch (err) {
+                console.warn('Error checking Trakt list item:', err);
+            }
+        }
+
+        // Detect if item exists in TMDB list
+        if (!alreadyAdded && tmdbSession && list.id) {
+            try {
+                const res = await fetch(`https://api.themoviedb.org/3/list/${list.id}?api_key=${TMDB_KEY}&session_id=${tmdbSession}`);
+                const listDetails = await res.json();
+                alreadyAdded = listDetails.items.some(i => i.id === currentMediaId && i.media_type === currentType);
+            } catch (err) {
+                console.warn('Error checking TMDB list item:', err);
+            }
+        }
+
+        // Set button label
+        btn.innerHTML = `${list.name} <span class="media-type">${mediaTypeLabel}</span>`;
+        if (alreadyAdded) btn.disabled = true;
+
+        // Button click
         btn.onclick = () => callback(list.ids?.slug || list.id);
         body.appendChild(btn);
-    });
+    }
 }
 
 /* ================================
