@@ -96,3 +96,54 @@ document.getElementById('modal-overlay').onclick = (e) => {
         document.getElementById('modal-overlay').classList.add('modal-hidden');
     }
 };
+
+/* Search Overlay Styles */
+#search-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: var(--bg);
+    z-index: 2000;
+    padding-top: env(safe-area-inset-top);
+}
+
+.search-header {
+    display: flex;
+    padding: 15px 20px;
+    gap: 15px;
+    align-items: center;
+}
+
+#search-input {
+    flex: 1;
+    background: #1c1c1e;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 15px;
+    color: white;
+    font-size: 17px;
+    outline: none;
+}
+
+#search-close {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 16px;
+    padding: 0;
+}
+
+/* Grid for Search Results */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 10px 20px;
+    overflow-y: auto;
+    height: calc(100vh - 100px);
+}
+
+/* Reuse card styles for search results */
+.grid .card {
+    min-width: unset;
+    width: 100%;
+}
