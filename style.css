@@ -1,104 +1,52 @@
-const TMDB_KEY = '37cc8cb617e62d17e6180754e7a94139';
-const TRAKT_ID = 'e2b666343235c45fc18f12f2f256c29e5bb5977bc6ca9ca8d6a5bef7a7d6778f';
-
-// IMPORTANT: For live-fetch of private lists, you need an Access Token.
-// You can get this from your Trakt API App dashboard for your own account.
-const ACCESS_TOKEN = localStorage.getItem('trakt_token') || 'YOUR_MANUAL_ACCESS_TOKEN';
-
-async function init() {
-    // 1. Fetch Trending (Public)
-    fetchTrakt('https://api.trakt.tv/movies/trending', 'trending-movies', 'movie', false);
-
-    // 2. Fetch Live Personal Data (Private)
-    if (ACCESS_TOKEN) {
-        document.getElementById('auth-btn').innerText = 'Connected';
-        document.getElementById('collection-sec').classList.remove('hidden');
-        document.getElementById('watchlist-sec').classList.remove('hidden');
-
-        fetchTrakt('https://api.trakt.tv/sync/collection/shows', 'my-collection', 'tv', true);
-        fetchTrakt('https://api.trakt.tv/sync/watchlist/shows', 'my-watchlist', 'tv', true);
-    }
+:root {
+    --bg: #000000;
+    --text: #ffffff;
+    --card: #1c1c1e;
+    --accent: #0a84ff;
 }
 
-async function fetchTrakt(url, containerId, type, isPrivate) {
-    const headers = {
-        'Content-Type': 'application/json',
-        'trakt-api-version': '2',
-        'trakt-api-key': TRAKT_ID
-    };
-
-    if (isPrivate) {
-        headers['Authorization'] = `Bearer ${ACCESS_TOKEN}`;
-    }
-
-    try {
-        const res = await fetch(url, { headers });
-        const data = await res.json();
-        const container = document.getElementById(containerId);
-        
-        data.slice(0, 15).forEach(item => {
-            const media = item.movie || item.show || item;
-            renderCard(media.title, media.ids.tmdb, type, container);
-        });
-    } catch (e) {
-        console.error("Live Fetch Failed:", e);
-    }
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding-bottom: 100px;
 }
 
-async function renderCard(title, id, type, container) {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `<div class="poster"></div><div class="card-title">${title}</div>`;
-    card.onclick = () => showDetails(id, type);
-    container.appendChild(card);
+#status-bar-spacer { height: env(safe-area-inset-top); }
+header { padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+h1 { font-size: 34px; font-weight: 800; margin: 0; }
 
-    // Live poster fetch from TMDB
-    const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
-    const data = await res.json();
-    if (data.poster_path) {
-        card.querySelector('.poster').outerHTML = `<img class="poster" src="https://image.tmdb.org/t/p/w342${data.poster_path}">`;
-    }
+.login-tag {
+    background: var(--card); color: var(--accent);
+    border: none; padding: 8px 12px; border-radius: 20px; font-weight: 600; font-size: 12px;
 }
 
-async function showDetails(id, type) {
-    const modal = document.getElementById('modal-overlay');
-    const body = document.getElementById('modal-body');
-    modal.classList.remove('modal-hidden');
-    body.innerHTML = 'Loading...';
+.section-label { padding: 0 20px; font-size: 20px; margin: 25px 0 10px; color: #8e8e93; }
 
-    const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}&append_to_response=videos`);
-    const data = await res.json();
-    const trailer = data.videos?.results.find(v => v.type === 'Trailer');
-
-    body.innerHTML = `
-        <img class="details-poster" src="https://image.tmdb.org/t/p/w780${data.backdrop_path || data.poster_path}">
-        <div class="details-title">${data.title || data.name}</div>
-        <div style="color:var(--accent); margin-bottom:10px;">★ ${data.vote_average.toFixed(1)}</div>
-        <div class="details-overview">${data.overview}</div>
-        ${trailer ? `<a href="https://youtube.com/watch?v=${trailer.key}" target="_blank" class="trailer-btn">Watch Trailer</a>` : ''}
-    `;
+.horizontal-scroller {
+    display: flex; overflow-x: auto; gap: 12px; padding: 0 20px 20px;
+    scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
 }
+.horizontal-scroller::-webkit-scrollbar { display: none; }
 
-// UI Controls
-document.getElementById('nav-search').onclick = () => document.getElementById('search-overlay').classList.remove('modal-hidden');
-document.getElementById('search-close').onclick = () => document.getElementById('search-overlay').classList.add('modal-hidden');
-document.getElementById('modal-close').onclick = () => document.getElementById('modal-overlay').classList.add('modal-hidden');
+.card { min-width: 140px; max-width: 140px; scroll-snap-align: start; background: var(--card); border-radius: 12px; overflow: hidden; }
+.poster { width: 100%; aspect-ratio: 2/3; object-fit: cover; background: #2c2c2e; }
+.card-title { padding: 8px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-// Search Logic
-let timer;
-document.getElementById('search-input').oninput = (e) => {
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-        const query = e.target.value;
-        if (query.length < 3) return;
-        const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${query}`);
-        const data = await res.json();
-        const results = document.getElementById('search-results');
-        results.innerHTML = '';
-        data.results.forEach(item => {
-            if (item.poster_path) renderCard(item.title || item.name, item.id, item.media_type, results);
-        });
-    }, 500);
-};
-
-init();
+/* Modal & Search */
+.modal-hidden { display: none; }
+.hidden { display: none; }
+#modal-overlay, #search-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); backdrop-filter: blur(15px); z-index: 1000; }
+#modal-content { position: absolute; bottom: 0; width: 100%; background: var(--card); border-radius: 20px 20px 0 0; padding: 20px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
+#modal-close { position: absolute; top: 15px; right: 20px; background: #333; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; }
+.details-poster { width: 100%; border-radius: 12px; margin-bottom: 15px; }
+.details-title { font-size: 24px; font-weight: 800; }
+.trailer-btn { display: block; width: 100%; padding: 15px; background: var(--accent); color: white; text-align: center; border-radius: 12px; text-decoration: none; font-weight: bold; margin-top: 20px; }
+.tab-bar { position: fixed; bottom: 0; width: 100%; height: 85px; background: rgba(25, 25, 25, 0.8); backdrop-filter: blur(20px); display: flex; justify-content: space-around; padding-bottom: env(safe-area-inset-bottom); border-top: 0.5px solid #333; z-index: 100; }
+.tab-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8e8e93; font-size: 10px; }
+.tab-item.active { color: var(--accent); }
+.tab-item span { font-size: 24px; }
+.search-header { display: flex; padding: 60px 20px 15px; gap: 10px; }
+#search-input { flex: 1; background: #2c2c2e; border: none; border-radius: 10px; padding: 12px; color: white; font-size: 16px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 20px; overflow-y: auto; height: 80vh; }
