@@ -7,9 +7,11 @@ const TMDB_KEY = '37cc8cb617e62d17e6180754e7a94139';
 const REDIRECT_URI = 'https://w2znkdg7zz-del.github.io/my-cinema/';
 
 /* ================================
-   STATE
+   STATE & CACHE
 ================================ */
 let pendingAction = null;
+const posterCache = {};         // { tmdbId: posterUrl }
+const sectionDataCache = {};    // { containerId: fullDataArray }
 
 /* ================================
    INIT
@@ -18,31 +20,42 @@ init();
 handleOAuthCallback();
 
 async function init() {
-    fetchTrakt('https://api.trakt.tv/movies/trending', 'trending-movies', 'movie');
-    fetchTrakt('https://api.trakt.tv/shows/popular', 'popular-shows', 'tv');
-    fetchTrakt('https://api.trakt.tv/shows/anticipated', 'anticipated', 'tv');
+    fetchTrakt('https://api.trakt.tv/movies/trending', 'trending-movies', 'movie', 'Trending Movies');
+    fetchTrakt('https://api.trakt.tv/shows/popular', 'popular-shows', 'tv', 'Popular TV Shows');
+    fetchTrakt('https://api.trakt.tv/shows/anticipated', 'anticipated', 'tv', 'Most Anticipated');
 }
 
 /* ================================
    TRKT FETCH & RENDER
 ================================ */
-async function fetchTrakt(url, containerId, type) {
+async function fetchTrakt(url, containerId, type, categoryLabel) {
     try {
-        const res = await fetch(url, { 
-            headers: { 
-                'trakt-api-version': '2', 
-                'trakt-api-key': TRAKT_ID 
+        const res = await fetch(url, {  
+            headers: {  
+                'trakt-api-version': '2',  
+                'trakt-api-key': TRAKT_ID  
             }
         });
         const data = await res.json();
         const container = document.getElementById(containerId);
-        
+
+        sectionDataCache[containerId] = data; // save full data
+
+        // Render first 15 items
         data.slice(0, 15).forEach(item => {
             const media = item.movie || item.show || item;
             if (media.ids && media.ids.tmdb) {
                 renderCard(media.title || media.name, media.ids.tmdb, type, container);
             }
         });
+
+        // Add "See More" card
+        const seeMoreCard = document.createElement('div');
+        seeMoreCard.className = 'card see-more';
+        seeMoreCard.innerHTML = `<div class="poster">See More</div>`;
+        seeMoreCard.onclick = () => openSectionModal(containerId, categoryLabel, type);
+        container.appendChild(seeMoreCard);
+
     } catch (err) {
         console.error("Error fetching Trakt data:", err);
     }
@@ -50,18 +63,28 @@ async function fetchTrakt(url, containerId, type) {
 
 async function renderCard(title, id, type, container) {
     if (!id) return;
+
     const card = document.createElement('div');
     card.className = 'card';
     card.innerHTML = `<div class="poster"></div><div class="card-title">${title}</div>`;
     card.onclick = () => showDetails(id, type);
     container.appendChild(card);
 
+    // Check poster cache first
+    if (posterCache[id]) {
+        const posterDiv = card.querySelector('.poster');
+        posterDiv.outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
+        return;
+    }
+
     try {
         const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
         const data = await res.json();
         if (data.poster_path) {
+            const posterUrl = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
+            posterCache[id] = posterUrl;
             const posterDiv = card.querySelector('.poster');
-            posterDiv.outerHTML = `<img class="poster" src="https://image.tmdb.org/t/p/w342${data.poster_path}" alt="${title}">`;
+            posterDiv.outerHTML = `<img class="poster" src="${posterUrl}" alt="${title}">`;
         }
     } catch (err) {
         console.error("Error fetching poster:", err);
@@ -98,6 +121,26 @@ async function showDetails(id, type) {
     } catch (err) {
         body.innerHTML = '<p>Error loading details.</p>';
     }
+}
+
+/* ================================
+   SECTION MODAL ("SEE MORE")
+================================ */
+function openSectionModal(containerId, categoryLabel, type) {
+    const modal = document.getElementById('modal-overlay');
+    const body = document.getElementById('modal-body');
+    modal.classList.remove('modal-hidden');
+
+    body.innerHTML = `<h3 style="margin-bottom:15px;">${categoryLabel}</h3><div class="grid"></div>`;
+    const grid = body.querySelector('.grid');
+
+    const items = sectionDataCache[containerId];
+    items.forEach(item => {
+        const media = item.movie || item.show || item;
+        if (media.ids && media.ids.tmdb) {
+            renderCard(media.title || media.name, media.ids.tmdb, type, grid);
+        }
+    });
 }
 
 /* ================================
