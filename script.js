@@ -1,147 +1,81 @@
 /* ================================
-   CONFIG & STATE
+   CONFIG
 ================================ */
 const TRAKT_ID = 'caae7a3191de89620d5a2f2955ebce640215e6a81b0cc7657b773de5edebfd40';
 const TRAKT_SECRET = '35a89bd5967a9151de677fd44a4872ab93efba1cc09fee80c27b9176459ece46';
 const TMDB_KEY = '37cc8cb617e62d17e6180754e7a94139';
 const REDIRECT_URI = 'https://w2znkdg7zz-del.github.io/my-cinema/';
 
-// Global State to track user data
+/* ================================
+   STATE
+================================ */
 let pendingAction = null;
-let userWatchlistIds = new Set(); 
-let sectionPages = { 'trending-movies': 1, 'popular-shows': 1, 'anticipated': 1 };
 
 /* ================================
-   INIT & AUTH CHECK
+   INIT
 ================================ */
 init();
 handleOAuthCallback();
 
 async function init() {
-    updateAuthUI();
-    // If logged in, sync watchlist first so cards render with "Saved" status
-    if (localStorage.getItem('trakt_token')) {
-        await syncTraktWatchlist();
-    }
-    
-    loadSection('https://api.trakt.tv/movies/trending', 'trending-movies', 'movie');
-    loadSection('https://api.trakt.tv/shows/popular', 'popular-shows', 'tv');
-    loadSection('https://api.trakt.tv/shows/anticipated', 'anticipated', 'tv');
-}
-
-function updateAuthUI() {
-    const traktBtn = document.getElementById('login-trakt-btn');
-    const tmdbBtn = document.getElementById('login-tmdb-btn');
-    
-    if (localStorage.getItem('trakt_token')) {
-        traktBtn.textContent = "Trakt: Connected ✓";
-        traktBtn.classList.add('connected');
-    }
-    if (localStorage.getItem('tmdb_session')) {
-        tmdbBtn.textContent = "TMDB: Connected ✓";
-        tmdbBtn.classList.add('connected');
-    }
+    fetchTrakt('https://api.trakt.tv/movies/trending', 'trending-movies', 'movie');
+    fetchTrakt('https://api.trakt.tv/shows/popular', 'popular-shows', 'tv');
+    fetchTrakt('https://api.trakt.tv/shows/anticipated', 'anticipated', 'tv');
 }
 
 /* ================================
-   SYNC LOGIC (Concern #3)
+   TRKT FETCH & RENDER
 ================================ */
-async function syncTraktWatchlist() {
+async function fetchTrakt(url, containerId, type) {
     try {
-        const res = await fetch('https://api.trakt.tv/sync/watchlist', {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('trakt_token')}`,
-                'trakt-api-version': '2',
-                'trakt-api-key': TRAKT_ID
+        const res = await fetch(url, { 
+            headers: { 
+                'trakt-api-version': '2', 
+                'trakt-api-key': TRAKT_ID 
             }
-        });
-        const data = await res.json();
-        data.forEach(item => {
-            const id = item.movie?.ids.tmdb || item.show?.ids.tmdb;
-            if (id) userWatchlistIds.add(id);
-        });
-    } catch (e) { console.error("Sync failed", e); }
-}
-
-/* ================================
-   FETCH & PAGINATION (Concern #1)
-================================ */
-async function loadSection(url, containerId, type) {
-    const page = sectionPages[containerId];
-    const fullUrl = `${url}?page=${page}&limit=15`;
-    
-    try {
-        const res = await fetch(fullUrl, { 
-            headers: { 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }
         });
         const data = await res.json();
         const container = document.getElementById(containerId);
         
-        data.forEach(item => {
+        data.slice(0, 15).forEach(item => {
             const media = item.movie || item.show || item;
-            if (media.ids?.tmdb) {
+            if (media.ids && media.ids.tmdb) {
                 renderCard(media.title || media.name, media.ids.tmdb, type, container);
             }
         });
-        
-        // Add "Load More" button if it doesn't exist
-        setupLoadMore(url, containerId, type);
-    } catch (err) { console.error("Fetch error:", err); }
-}
-
-function setupLoadMore(url, containerId, type) {
-    let btn = document.getElementById(`more-${containerId}`);
-    if (!btn) {
-        btn = document.createElement('button');
-        btn.id = `more-${containerId}`;
-        btn.className = 'load-more-btn';
-        btn.textContent = 'Load More';
-        btn.onclick = () => {
-            sectionPages[containerId]++;
-            loadSection(url, containerId, type);
-        };
-        document.getElementById(containerId).after(btn);
+    } catch (err) {
+        console.error("Error fetching Trakt data:", err);
     }
 }
 
-/* ================================
-   RENDER CARD
-================================ */
 async function renderCard(title, id, type, container) {
     if (!id) return;
-    const isSaved = userWatchlistIds.has(id);
-    
     const card = document.createElement('div');
-    card.className = `card ${isSaved ? 'in-list' : ''}`;
-    card.innerHTML = `
-        <div class="poster-container">
-            <div class="poster-placeholder"></div>
-            ${isSaved ? '<span class="badge">✓ In List</span>' : ''}
-        </div>
-        <div class="card-title">${title}</div>
-    `;
+    card.className = 'card';
+    card.innerHTML = `<div class="poster"></div><div class="card-title">${title}</div>`;
     card.onclick = () => showDetails(id, type);
     container.appendChild(card);
 
-    // Fetch Poster from TMDB
     try {
         const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
         const data = await res.json();
         if (data.poster_path) {
-            card.querySelector('.poster-placeholder').outerHTML = 
-                `<img class="poster" src="https://image.tmdb.org/t/p/w342${data.poster_path}" alt="${title}">`;
+            const posterDiv = card.querySelector('.poster');
+            posterDiv.outerHTML = `<img class="poster" src="https://image.tmdb.org/t/p/w342${data.poster_path}" alt="${title}">`;
         }
-    } catch (e) {}
+    } catch (err) {
+        console.error("Error fetching poster:", err);
+    }
 }
 
 /* ================================
-   MODAL & ACTIONS
+   SHOW DETAILS MODAL
 ================================ */
 async function showDetails(id, type) {
     const modal = document.getElementById('modal-overlay');
     const body = document.getElementById('modal-body');
     modal.classList.remove('modal-hidden');
-    body.innerHTML = '<p>Loading...</p>';
+    body.innerHTML = '<p style="text-align:center; padding-top:50px;">Loading...</p>';
 
     try {
         const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}&append_to_response=videos`);
@@ -151,17 +85,20 @@ async function showDetails(id, type) {
         body.innerHTML = `
             <img class="details-poster" src="https://image.tmdb.org/t/p/w780${data.backdrop_path || data.poster_path}">
             <div class="details-title">${data.title || data.name}</div>
-            <div class="details-overview">${data.overview}</div>
-            <div class="modal-actions">
-                <button class="action-btn" onclick="addToTrakt(${id}, '${type}')">
-                    ${userWatchlistIds.has(id) ? 'Add Another to Trakt' : 'Add to Trakt'}
-                </button>
+            <div style="color:var(--accent); margin:10px 0;">★ ${data.vote_average ? data.vote_average.toFixed(1) : 'N/A'}</div>
+            <div class="details-overview">${data.overview || 'No description available.'}</div>
+
+            ${trailer ? `<a href="https://youtube.com/watch?v=${trailer.key}" target="_blank" class="trailer-btn">Watch Trailer</a>` : ''}
+
+            <div style="margin-top:20px;">
+                <button class="action-btn" onclick="addToTrakt(${id}, '${type}')">Add to Trakt List</button>
+                ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id})">Add to TMDB List</button>` : ''}
             </div>
         `;
-    } catch (e) { body.innerHTML = '<p>Error.</p>'; }
+    } catch (err) {
+        body.innerHTML = '<p>Error loading details.</p>';
+    }
 }
-
-/* (OAuth functions exchangeTraktToken, loginTrakt, loginTMDB, etc. remain the same as your original snippet) */
 
 /* ================================
    OAUTH HANDLING
