@@ -67,3 +67,33 @@ h1 { font-size: 34px; font-weight: 800; margin: 0; }
 #search-input { flex: 1; background: #2c2c2e; border: none; border-radius: 10px; padding: 12px; color: white; font-size: 16px; outline: none; }
 #search-close { background: none; border: none; color: var(--accent); font-size: 16px; }
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 20px; overflow-y: auto; height: calc(100vh - 120px); }
+.auth-btn {
+    background: var(--accent);
+    border: none;
+    padding: 8px 12px;
+    color: white;
+    border-radius: 8px;
+    margin-right: 8px;
+}
+
+.action-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-weight: bold;
+}
+
+.list-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px;
+    background: #2c2c2e;
+    border: none;
+    color: white;
+    border-radius: 8px;
+}
