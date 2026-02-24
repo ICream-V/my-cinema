@@ -162,3 +162,198 @@ async function showDetails(id, type) {
         body.innerHTML = '<p>Error loading details.</p>';
     }
 }
+
+/* ================================
+   OAUTH HANDLING
+================================ */
+function handleOAuthCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const tmdbApproved = params.get('approved');
+
+    if (code && !localStorage.getItem('trakt_token')) {
+        exchangeTraktToken(code);
+    }
+
+    if (tmdbApproved === 'true') {
+        createTMDBSession();
+    }
+}
+
+async function exchangeTraktToken(code) {
+    const res = await fetch('https://api.trakt.tv/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            code,
+            client_id: TRAKT_ID,
+            client_secret: TRAKT_SECRET,
+            redirect_uri: REDIRECT_URI,
+            grant_type: 'authorization_code'
+        })
+    });
+    const data = await res.json();
+    localStorage.setItem('trakt_token', data.access_token);
+    cleanURL();
+    retryPendingAction();
+}
+
+function loginTrakt() {
+    window.location.href =
+        `https://api.trakt.tv/oauth/authorize?response_type=code&client_id=${TRAKT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+}
+
+async function loginTMDB() {
+    const res = await fetch(`https://api.themoviedb.org/3/authentication/token/new?api_key=${TMDB_KEY}`);
+    const data = await res.json();
+    localStorage.setItem('tmdb_request_token', data.request_token);
+    window.location.href =
+        `https://www.themoviedb.org/authenticate/${data.request_token}?redirect_to=${encodeURIComponent(REDIRECT_URI)}`;
+}
+
+async function createTMDBSession() {
+    const request_token = localStorage.getItem('tmdb_request_token');
+    const res = await fetch(`https://api.themoviedb.org/3/authentication/session/new?api_key=${TMDB_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_token })
+    });
+    const data = await res.json();
+    localStorage.setItem('tmdb_session', data.session_id);
+    cleanURL();
+    retryPendingAction();
+}
+
+/* ================================
+   ADD TO LIST LOGIC
+================================ */
+function addToTrakt(id, type) {
+    const token = localStorage.getItem('trakt_token');
+    if (!token) {
+        pendingAction = () => addToTrakt(id, type);
+        loginTrakt();
+        return;
+    }
+    fetchUserTraktLists(token, id, type);
+}
+
+async function fetchUserTraktLists(token, mediaId, type) {
+    const res = await fetch('https://api.trakt.tv/users/me/lists', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'trakt-api-version': '2',
+            'trakt-api-key': TRAKT_ID
+        }
+    });
+    const lists = await res.json();
+    showListSelector(lists, (listId) => addItemToTraktList(token, listId, mediaId, type));
+}
+
+async function addItemToTraktList(token, listId, mediaId, type) {
+    const body = {
+        [type === 'movie' ? 'movies' : 'shows']: [{
+            ids: { tmdb: mediaId }
+        }]
+    };
+    await fetch(`https://api.trakt.tv/users/me/lists/${listId}/items`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'trakt-api-version': '2',
+            'trakt-api-key': TRAKT_ID,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+    alert('Added to Trakt list!');
+}
+
+function addToTMDB(id) {
+    const session = localStorage.getItem('tmdb_session');
+    if (!session) {
+        pendingAction = () => addToTMDB(id);
+        loginTMDB();
+        return;
+    }
+    fetchTMDBLists(session, id);
+}
+
+async function fetchTMDBLists(session, mediaId) {
+    const account = await fetch(`https://api.themoviedb.org/3/account?api_key=${TMDB_KEY}&session_id=${session}`);
+    const accData = await account.json();
+    const res = await fetch(`https://api.themoviedb.org/3/account/${accData.id}/lists?api_key=${TMDB_KEY}&session_id=${session}`);
+    const lists = await res.json();
+    showListSelector(lists.results, (listId) => addToTMDBList(listId, mediaId, session));
+}
+
+async function addToTMDBList(listId, mediaId, session) {
+    await fetch(`https://api.themoviedb.org/3/list/${listId}/add_item?api_key=${TMDB_KEY}&session_id=${session}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media_id: mediaId })
+    });
+    alert('Added to TMDB list!');
+}
+
+/* ================================
+   LIST SELECTOR UI
+================================ */
+function showListSelector(lists, callback) {
+    const body = document.getElementById('modal-body');
+    body.innerHTML = '<h3>Select List</h3>';
+    lists.forEach(list => {
+        const btn = document.createElement('button');
+        btn.className = 'list-btn';
+        btn.textContent = list.name;
+        btn.onclick = () => callback(list.ids?.slug || list.id);
+        body.appendChild(btn);
+    });
+}
+
+/* ================================
+   UTILITIES
+================================ */
+function retryPendingAction() {
+    if (pendingAction) {
+        pendingAction();
+        pendingAction = null;
+    }
+}
+
+function cleanURL() {
+    window.history.replaceState({}, document.title, window.location.pathname);
+}
+
+/* ================================
+   UI CONTROLS
+================================ */
+document.getElementById('nav-search').onclick = () => document.getElementById('search-overlay').classList.remove('modal-hidden');
+document.getElementById('search-close').onclick = () => document.getElementById('search-overlay').classList.add('modal-hidden');
+document.getElementById('modal-close').onclick = () => document.getElementById('modal-overlay').classList.add('modal-hidden');
+
+/* ================================
+   SEARCH LOGIC WITH POSTER CACHING
+================================ */
+let searchTimer;
+document.getElementById('search-input').oninput = (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+        const query = e.target.value.trim();
+        if (query.length < 3) return;
+
+        const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        const results = document.getElementById('search-results');
+        results.innerHTML = '';
+
+        data.results.forEach(item => {
+            if (item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv')) {
+                const posterId = item.id;
+                if (!posterCache[posterId]) {
+                    posterCache[posterId] = `https://image.tmdb.org/t/p/w342${item.poster_path}`;
+                }
+                renderCard(item.title || item.name, posterId, item.media_type, results);
+            }
+        });
+    }, 500);
+};
