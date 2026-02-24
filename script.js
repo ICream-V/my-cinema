@@ -294,76 +294,58 @@ async function addToTMDBList(listId, mediaId, session) {
     });
     alert('Added to TMDB list!');
 }
-
 /* ================================
-   LIST SELECTOR UI WITH ITEM DETECTION
+   LIST SELECTOR UI WITH TMDB MEDIA TYPE
 ================================ */
-async function showListSelector(lists, callback, currentMediaId, currentType) {
+async function showListSelector(lists, callback) {
     const body = document.getElementById('modal-body');
     body.innerHTML = '<h3>Select List</h3>';
 
-    // Trakt token and TMDB session
-    const traktToken = localStorage.getItem('trakt_token');
-    const tmdbSession = localStorage.getItem('tmdb_session');
+    const buttons = []; // Collect buttons to preserve order
 
     for (const list of lists) {
         const btn = document.createElement('button');
         btn.className = 'list-btn';
-        let mediaTypeLabel = ''; // for TMDB lists
 
-        // Detect TMDB media type if it's a TMDB list
-        if (list.id && list.item_count !== undefined && tmdbSession) {
+        let label = list.name;
+
+        // TMDB list: fetch media types to display
+        if (list.id && list.item_count !== undefined && localStorage.getItem('tmdb_session')) {
             try {
-                const res = await fetch(`https://api.themoviedb.org/3/list/${list.id}?api_key=${TMDB_KEY}&session_id=${tmdbSession}`);
-                const listDetails = await res.json();
-                const types = new Set(listDetails.items.map(i => i.media_type));
+                const session = localStorage.getItem('tmdb_session');
+                const res = await fetch(`https://api.themoviedb.org/3/list/${list.id}?api_key=${TMDB_KEY}&session_id=${session}`);
+                const details = await res.json();
+
+                const types = new Set(details.items.map(i => i.media_type));
+                let mediaTypeLabel;
                 if (types.size === 1) {
                     mediaTypeLabel = types.has('movie') ? 'Movie List' : 'TV List';
                 } else {
                     mediaTypeLabel = 'Mixed List';
                 }
+
+                label += ` (${mediaTypeLabel}, ${details.items.length} items)`;
             } catch (err) {
                 console.warn('Error fetching TMDB list details:', err);
-                mediaTypeLabel = 'Mixed List';
+                label += ` (List, ${list.item_count} items)`;
             }
+        } 
+        // Trakt list: just show list name (no extra label)
+        else if (list.ids?.slug) {
+            // optional: add item count if available
+            if (list.item_count) label += ` (${list.item_count} items)`;
         }
 
-        // Detect if item exists in Trakt list
-        let alreadyAdded = false;
-        if (traktToken && list.ids?.slug) {
-            try {
-                const res = await fetch(`https://api.trakt.tv/users/me/lists/${list.ids.slug}/items/${currentType}/${currentMediaId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${traktToken}`,
-                        'trakt-api-version': '2',
-                        'trakt-api-key': TRAKT_ID
-                    }
-                });
-                alreadyAdded = res.status === 200;
-            } catch (err) {
-                console.warn('Error checking Trakt list item:', err);
-            }
-        }
+        btn.textContent = label;
 
-        // Detect if item exists in TMDB list
-        if (!alreadyAdded && tmdbSession && list.id) {
-            try {
-                const res = await fetch(`https://api.themoviedb.org/3/list/${list.id}?api_key=${TMDB_KEY}&session_id=${tmdbSession}`);
-                const listDetails = await res.json();
-                alreadyAdded = listDetails.items.some(i => i.id === currentMediaId && i.media_type === currentType);
-            } catch (err) {
-                console.warn('Error checking TMDB list item:', err);
-            }
-        }
-
-        // Set button label
-        btn.innerHTML = `${list.name} <span class="media-type">${mediaTypeLabel}</span>`;
-        if (alreadyAdded) btn.disabled = true;
-
-        // Button click
+        // Button click triggers callback
         btn.onclick = () => callback(list.ids?.slug || list.id);
-        body.appendChild(btn);
+
+        buttons.push(btn);
     }
+
+    // Append buttons in collected order (top-to-bottom)
+    buttons.forEach(btn => body.appendChild(btn));
 }
 
 /* ================================
