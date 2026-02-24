@@ -1,5 +1,5 @@
-const TMDB_KEY = 'YOUR_TMDB_API_KEY';
-const TRAKT_ID = 'YOUR_TRAKT_CLIENT_ID';
+const TMDB_KEY = '37cc8cb617e62d17e6180754e7a94139';
+const TRAKT_ID = 'e2b666343235c45fc18f12f2f256c29e5bb5977bc6ca9ca8d6a5bef7a7d6778f';
 
 async function loadContent() {
     // 1. Fetch from Trakt
