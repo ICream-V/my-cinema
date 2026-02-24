@@ -195,6 +195,11 @@ function showListSelector(lists, callback) {
         btn.textContent = list.name;
         btn.onclick = () => callback(list.ids?.slug || list.id);
         body.appendChild(btn);
+
+       <div style="margin-top:20px;">
+    <button class="action-btn" onclick="addToTrakt(${id}, '${type}')">Add to Trakt List</button>
+    ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id})">Add to TMDB List</button>` : ''}
+</div>
     });
 }
 
