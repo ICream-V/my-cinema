@@ -140,85 +140,26 @@ async function showDetails(id, type) {
     modal.classList.remove('modal-hidden');
     body.innerHTML = '<p style="text-align:center; padding-top:50px;">Loading...</p>';
 
-    let isInTrakt = false;
-    let isInTMDB = false;
-
     try {
-        // Fetch media details
         const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}&append_to_response=videos`);
         const data = await res.json();
         const trailer = data.videos?.results.find(v => v.type === 'Trailer' && v.site === 'YouTube');
 
-        const traktToken = localStorage.getItem('trakt_token');
-        const tmdbSession = localStorage.getItem('tmdb_session');
-
-        // === Trakt: fetch all lists first ===
-        if (traktToken) {
-            const listsRes = await fetch('https://api.trakt.tv/users/me/lists', {
-                headers: {
-                    'Authorization': `Bearer ${traktToken}`,
-                    'trakt-api-version': '2',
-                    'trakt-api-key': TRAKT_ID
-                }
-            });
-            const traktLists = await listsRes.json();
-
-            // Parallel fetch all lists items to check if media exists
-            const checkPromises = traktLists.map(list =>
-                fetch(`https://api.trakt.tv/users/me/lists/${list.ids.slug}/items/${type}/${id}`, {
-                    headers: {
-                        'Authorization': `Bearer ${traktToken}`,
-                        'trakt-api-version': '2',
-                        'trakt-api-key': TRAKT_ID
-                    }
-                }).then(r => r.status === 200)
-            );
-
-            const results = await Promise.all(checkPromises);
-            isInTrakt = results.includes(true);
-        }
-
-        // === TMDB: fetch all lists in parallel ===
-        if (tmdbSession) {
-            const accountRes = await fetch(`https://api.themoviedb.org/3/account?api_key=${TMDB_KEY}&session_id=${tmdbSession}`);
-            const accountData = await accountRes.json();
-
-            const listsRes = await fetch(`https://api.themoviedb.org/3/account/${accountData.id}/lists?api_key=${TMDB_KEY}&session_id=${tmdbSession}`);
-            const tmdbLists = await listsRes.json();
-
-            // Fetch all list details in parallel
-            const tmdbCheckPromises = tmdbLists.results.map(list =>
-                fetch(`https://api.themoviedb.org/3/list/${list.id}?api_key=${TMDB_KEY}&session_id=${tmdbSession}`)
-                    .then(res => res.json())
-                    .then(listData => listData.items.some(i => i.id === id && i.media_type === type))
-                    .catch(() => false)
-            );
-
-            const tmdbResults = await Promise.all(tmdbCheckPromises);
-            isInTMDB = tmdbResults.includes(true);
-        }
-
-        // === Build modal content ===
         body.innerHTML = `
             <img class="details-poster" src="https://image.tmdb.org/t/p/w780${data.backdrop_path || data.poster_path}">
             <div class="details-title">${data.title || data.name}</div>
             <div style="color:var(--accent); margin:10px 0;">★ ${data.vote_average ? data.vote_average.toFixed(1) : 'N/A'}</div>
             <div class="details-overview">${data.overview || 'No description available.'}</div>
+
             ${trailer ? `<a href="https://youtube.com/watch?v=${trailer.key}" target="_blank" class="trailer-btn">Watch Trailer</a>` : ''}
+
             <div style="margin-top:20px;">
-                <button class="action-btn" onclick="addToTrakt(${id}, '${type}')" 
-                    ${isInTrakt ? 'disabled style="background:#555;cursor:not-allowed;"' : ''}>
-                    ${isInTrakt ? 'Already in Trakt' : 'Add to Trakt List'}
-                </button>
-                ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id})" 
-                    ${isInTMDB ? 'disabled style="background:#555;cursor:not-allowed;"' : ''}>
-                    ${isInTMDB ? 'Already in TMDB' : 'Add to TMDB List'}
-                </button>` : ''}
+                <button class="action-btn" onclick="addToTrakt(${id}, '${type}')">Add to Trakt List</button>
+                ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id})">Add to TMDB List</button>` : ''}
             </div>
         `;
     } catch (err) {
         body.innerHTML = '<p>Error loading details.</p>';
-        console.error(err);
     }
 }
 /* ================================
