@@ -124,33 +124,44 @@ function renderLibraryCard(item, container) {
     card.innerHTML = `
         <div class="poster"></div>
         <div class="card-title">${item.title}</div>
-        <button class="remove-btn">Remove</button>
     `;
 
-    // Poster
+    // Poster image
     if (item.poster) {
         card.querySelector('.poster').outerHTML = `<img class="poster" src="${item.poster}" alt="${item.title}">`;
     }
 
-    // Show details on click (poster or card)
+    // Show details on click
     card.querySelector('.poster').onclick = () => showDetails(item.id, item.type);
     card.querySelector('.card-title').onclick = () => showDetails(item.id, item.type);
 
-    // Remove button
-    const removeBtn = card.querySelector('.remove-btn');
-    removeBtn.onclick = () => {
+    // Trash icon for removal
+    const trash = document.createElement('div');
+    trash.innerHTML = '🗑️'; // Can replace with other icon if desired
+    trash.style.position = 'absolute';
+    trash.style.top = '6px';
+    trash.style.left = '6px';
+    trash.style.fontSize = '16px';
+    trash.style.background = 'rgba(0,0,0,0.6)';
+    trash.style.padding = '3px';
+    trash.style.borderRadius = '4px';
+    trash.style.cursor = 'pointer';
+    trash.title = 'Remove from Library';
+
+    trash.onclick = (e) => {
+        e.stopPropagation(); // Prevent triggering showDetails
         const lib = getLibrary();
         const key = item.type === 'movie' ? 'movies' : 'tv';
         delete lib[key][item.id];
         saveLibrary(lib);
-
-        // Remove card from DOM immediately
         container.removeChild(card);
     };
 
+    card.style.position = 'relative';
+    card.appendChild(trash);
+
     container.appendChild(card);
 }
-
 /* ================================
    INIT & UTILS
 ================================ */
