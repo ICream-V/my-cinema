@@ -215,6 +215,7 @@ h1 {
   padding: 20px;
   overflow-y: auto;
   height: calc(100vh - 120px);
+  padding-bottom: 50px;
 }
 
 .auth-btn {
