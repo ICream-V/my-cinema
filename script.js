@@ -121,18 +121,34 @@ function openLibraryView(filter = 'all') {
 function renderLibraryCard(item, container) {
     const card = document.createElement('div');
     card.className = 'card';
-
     card.innerHTML = `
-        ${item.poster ? `<img class="poster" src="${item.poster}" alt="${item.title}">`
-        : `<div class="poster"></div>`}
+        <div class="poster"></div>
         <div class="card-title">${item.title}</div>
+        <button class="remove-btn">Remove</button>
     `;
 
-    card.onclick = () => showDetails(item.id, item.type);
+    // Poster
+    if (item.poster) {
+        card.querySelector('.poster').outerHTML = `<img class="poster" src="${item.poster}" alt="${item.title}">`;
+    }
+
+    // Show details on click (poster or card)
+    card.querySelector('.poster').onclick = () => showDetails(item.id, item.type);
+    card.querySelector('.card-title').onclick = () => showDetails(item.id, item.type);
+
+    // Remove button
+    const removeBtn = card.querySelector('.remove-btn');
+    removeBtn.onclick = () => {
+        const lib = getLibrary();
+        const key = item.type === 'movie' ? 'movies' : 'tv';
+        delete lib[key][item.id];
+        saveLibrary(lib);
+
+        // Remove card from DOM immediately
+        container.removeChild(card);
+    };
 
     container.appendChild(card);
-
-    applyLibraryBadge(card, item.id, item.type);
 }
 
 /* ================================
