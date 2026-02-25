@@ -11,7 +11,43 @@ const REDIRECT_URI = 'https://icream-v.github.io/my-cinema/';
 ================================ */
 let wasSearchOpen = false; 
 const posterCache = {};         
-const sectionDataCache = {};    
+const sectionDataCache = {};
+
+/* ================================
+   LOCAL LIBRARY
+================================ */
+
+function getLibrary() {
+    return JSON.parse(localStorage.getItem('myLibrary')) || {
+        movies: {},
+        tv: {}
+    };
+}
+
+function saveLibrary(data) {
+    localStorage.setItem('myLibrary', JSON.stringify(data));
+}
+
+function isInLibrary(id, type) {
+    const lib = getLibrary();
+    const key = type === 'movie' ? 'movies' : 'tv';
+    return !!lib[key][id];
+}
+
+function addToLibrary(id, type, title, poster) {
+    const lib = getLibrary();
+    const key = type === 'movie' ? 'movies' : 'tv';
+
+    lib[key][id] = {
+        id,
+        type,
+        title,
+        poster,
+        addedAt: Date.now()
+    };
+
+    saveLibrary(lib);
+}
 
 /* ================================
    INIT & UTILS
@@ -79,6 +115,22 @@ async function renderCard(title, id, type, container) {
             card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
         }
     } catch (err) { console.error(err); }
+
+   // Library badge
+if (isInLibrary(id, type)) {
+    const badge = document.createElement('div');
+    badge.textContent = '📚';
+    badge.style.position = 'absolute';
+    badge.style.top = '6px';
+    badge.style.right = '6px';
+    badge.style.fontSize = '16px';
+    badge.style.background = 'rgba(0,0,0,0.7)';
+    badge.style.padding = '4px';
+    badge.style.borderRadius = '6px';
+
+    card.style.position = 'relative';
+    card.appendChild(badge);
+}
 }
 
 /* ================================
@@ -136,8 +188,8 @@ async function showDetails(id, type) {
             <div class="details-overview">${data.overview || 'No description available.'}</div>
             ${trailer ? `<a href="https://youtube.com/watch?v=${trailer.key}" target="_blank" class="trailer-btn">Watch Trailer</a>` : ''}
             <div style="margin-top:20px;">
-                <button class="action-btn" onclick="addToTrakt(${id}, '${type}')">Add to Trakt List</button>
-                ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id})">Add to TMDB List</button>` : ''}
+                <button class="action-btn" onclick="addToTrakt(${id}, '${type}', '${data.title || data.name}', '${data.poster_path || ''}')">Add to Trakt List</button>
+                ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id}, '${data.title || data.name}', '${data.poster_path || ''}')">Add to TMDB List</button>` : ''}
             </div>
         `;
     } catch (err) { body.innerHTML = '<p>Error.</p>'; }
@@ -217,7 +269,7 @@ async function loginTMDB() {
     window.location.href = `https://www.themoviedb.org/authenticate/${data.request_token}?redirect_to=${encodeURIComponent(REDIRECT_URI)}`;
 }
 
-function addToTrakt(id, type) {
+function addToTrakt(id, type, title, posterPath) {
     const token = localStorage.getItem('trakt_token');
     if (!token) { loginTrakt(); return; }
     fetch('https://api.trakt.tv/users/me/lists', { headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }})
@@ -227,11 +279,18 @@ function addToTrakt(id, type) {
             headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID, 'Content-Type': 'application/json' },
             body: JSON.stringify({ [type === 'movie' ? 'movies' : 'shows']: [{ ids: { tmdb: id } }] })
         });
-        alert('Added to Trakt!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
+        addToLibrary(
+    id,
+    type,
+    title,
+    posterPath ? `https://image.tmdb.org/t/p/w342${posterPath}` : null
+);
+
+alert('Added to Trakt & Library!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
     }));
 }
 
-function addToTMDB(id) {
+function addToTMDB(id, title, posterPath) {
     const session = localStorage.getItem('tmdb_session');
     if (!session) { loginTMDB(); return; }
     fetch(`https://api.themoviedb.org/3/account?api_key=${TMDB_KEY}&session_id=${session}`)
@@ -242,7 +301,14 @@ function addToTMDB(id) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ media_id: id })
         });
-        alert('Added to TMDB!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
+        addToLibrary(
+    id,
+    'movie',
+    title,
+    posterPath ? `https://image.tmdb.org/t/p/w342${posterPath}` : null
+);
+
+alert('Added to TMDB & Library!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
     }));
 }
 
