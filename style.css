@@ -286,6 +286,7 @@ h1 {
 }
 
 .card.see-more:hover {
+  transform: scale(1.05);
   background: rgba(10, 132, 255, 0.3);
 }
 
