@@ -290,6 +290,15 @@ h1 {
   background: rgba(10, 132, 255, 0.3);
 }
 
+/* Fix for the See More card grey area */
+.card.see-more .poster {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 #modal-body h3 {
   color: var(--text);
   font-size: 20px;
