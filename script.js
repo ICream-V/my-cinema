@@ -9,7 +9,6 @@ const REDIRECT_URI = 'https://w2znkdg7zz-del.github.io/my-cinema/';
 /* ================================
    STATE & CACHE
 ================================ */
-let pendingAction = null;
 let wasSearchOpen = false; 
 const posterCache = {};         
 const sectionDataCache = {};    
@@ -83,50 +82,36 @@ async function renderCard(title, id, type, container) {
 }
 
 /* ================================
-   UPDATED SEE MORE MODAL (DEEP FETCH)
+   SEE MORE (DEEP FETCH)
 ================================ */
 async function openSectionModal(containerId, categoryLabel, type, apiUrl) {
     const modal = document.getElementById('modal-overlay');
     const body = document.getElementById('modal-body');
-    
     setScrollLock(true);
     modal.classList.remove('modal-hidden');
     
-    // 1. Show a loading state inside the grid
     body.innerHTML = `
         <h3 style="margin:0 0 15px 10px;">${categoryLabel}</h3>
         <div class="grid" id="modal-grid">
-            <p style="color:gray; padding:20px;">Fetching more items...</p>
+            <p style="color:gray; padding:20px;">Deep fetching top 100...</p>
         </div>
     `;
-    
+
     try {
-        // 2. Fetch a much larger set (Limit 100) specifically for the modal
-        // We append the limit parameter to the Trakt URL
         const deepUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}limit=100`;
-        
-        const res = await fetch(deepUrl, { 
-            headers: { 
-                'trakt-api-version': '2', 
-                'trakt-api-key': TRAKT_ID 
-            }
-        });
+        const res = await fetch(deepUrl, { headers: { 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }});
         const items = await res.json();
         
         const grid = document.getElementById('modal-grid');
-        grid.innerHTML = ''; // Clear loading text
+        grid.innerHTML = ''; 
 
-        // 3. Render the expanded list
         items.forEach(item => {
             const media = item.movie || item.show || item;
-            if (media.ids?.tmdb) {
-                renderCard(media.title || media.name, media.ids.tmdb, type, grid);
-            }
+            if (media.ids?.tmdb) renderCard(media.title || media.name, media.ids.tmdb, type, grid);
         });
-    } catch (err) {
-        document.getElementById('modal-grid').innerHTML = '<p>Error loading expanded list.</p>';
-    }
+    } catch (err) { body.querySelector('.grid').innerHTML = '<p>Error loading items.</p>'; }
 }
+
 async function showDetails(id, type) {
     const modal = document.getElementById('modal-overlay');
     const body = document.getElementById('modal-body');
@@ -159,7 +144,7 @@ async function showDetails(id, type) {
 }
 
 /* ================================
-   LIST SELECTOR (RE-IMPLEMENTED)
+   LIST SELECTOR (METADATA)
 ================================ */
 async function showListSelector(lists, callback) {
     const body = document.getElementById('modal-body');
@@ -168,10 +153,9 @@ async function showListSelector(lists, callback) {
 
     for (const list of lists) {
         const btn = document.createElement('button');
-        btn.className = 'list-btn'; // Uses your custom CSS
+        btn.className = 'list-btn'; 
         let label = list.name;
 
-        // TMDB: Fetch specific media types and count
         if (tmdbSession && list.id && list.item_count !== undefined) {
             try {
                 const res = await fetch(`https://api.themoviedb.org/3/list/${list.id}?api_key=${TMDB_KEY}&session_id=${tmdbSession}`);
@@ -181,7 +165,6 @@ async function showListSelector(lists, callback) {
                 label += ` (${typeLabel}, ${details.items.length} items)`;
             } catch (e) { label += ` (${list.item_count} items)`; }
         } 
-        // Trakt: Add item count
         else if (list.ids?.slug) {
             if (list.item_count) label += ` (${list.item_count} items)`;
         }
@@ -193,7 +176,7 @@ async function showListSelector(lists, callback) {
 }
 
 /* ================================
-   AUTHENTICATION
+   AUTHENTICATION & ACTIONS
 ================================ */
 function handleOAuthCallback() {
     const params = new URLSearchParams(window.location.search);
@@ -234,9 +217,6 @@ async function loginTMDB() {
     window.location.href = `https://www.themoviedb.org/authenticate/${data.request_token}?redirect_to=${encodeURIComponent(REDIRECT_URI)}`;
 }
 
-/* ================================
-   LIST ACTIONS
-================================ */
 function addToTrakt(id, type) {
     const token = localStorage.getItem('trakt_token');
     if (!token) { loginTrakt(); return; }
@@ -267,7 +247,7 @@ function addToTMDB(id) {
 }
 
 /* ================================
-   EVENT LISTENERS & SEARCH
+   CONTROLS & SEARCH
 ================================ */
 document.getElementById('modal-close').onclick = () => {
     document.getElementById('modal-overlay').classList.add('modal-hidden');
