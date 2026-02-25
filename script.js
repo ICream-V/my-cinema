@@ -112,36 +112,21 @@ async function openSectionModal(containerId, categoryLabel, type, apiUrl) {
     } catch (err) { body.querySelector('.grid').innerHTML = '<p>Error loading items.</p>'; }
 }
 
-// Global states
-let states = { traktWatch: false, traktColl: false, tmdbWatch: false, tmdbFav: false };
-
 async function showDetails(id, type) {
     const modal = document.getElementById('modal-overlay');
     const body = document.getElementById('modal-body');
     const searchOverlay = document.getElementById('search-overlay');
-    
-    if (!searchOverlay.classList.contains('modal-hidden')) {
-        wasSearchOpen = true;
-        searchOverlay.classList.add('modal-hidden');
-    }
+
+    wasSearchOpen = !searchOverlay.classList.contains('modal-hidden');
+    if (wasSearchOpen) searchOverlay.classList.add('modal-hidden');
 
     modal.classList.remove('modal-hidden');
     setScrollLock(true);
-    body.innerHTML = '<p style="text-align:center; padding-top:50px;">Checking status...</p>';
+    body.innerHTML = '<p style="text-align:center; padding-top:50px;">Loading...</p>';
 
     try {
-        // Parallel status checking
-        const [tmdbRes, tWatch, tColl, mWatch, mFav] = await Promise.all([
-            fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}&append_to_response=videos`),
-            checkTraktStatus(id, type, 'watchlist'),
-            checkTraktStatus(id, type, 'collection'),
-            checkTMDBStatus(id, type, 'watchlist'),
-            checkTMDBStatus(id, type, 'favorite')
-        ]);
-
-        const data = await tmdbRes.json();
-        states = { traktWatch: tWatch, traktColl: tColl, tmdbWatch: mWatch, tmdbFav: mFav };
-
+        const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}&append_to_response=videos`);
+        const data = await res.json();
         const trailer = data.videos?.results.find(v => v.type === 'Trailer' && v.site === 'YouTube');
 
         body.innerHTML = `
@@ -149,85 +134,13 @@ async function showDetails(id, type) {
             <div class="details-title">${data.title || data.name}</div>
             <div style="color:var(--accent); margin:10px 0;">★ ${data.vote_average?.toFixed(1) || 'N/A'}</div>
             <div class="details-overview">${data.overview || 'No description available.'}</div>
-            
-            <div class="action-grid">
-                <button id="t-watch" class="action-btn ${states.traktWatch ? 'active' : ''}" onclick="toggleTrakt(${id}, '${type}', 'watchlist')">
-                    Trakt Watchlist ${states.traktWatch ? '✓' : '+'}
-                </button>
-                <button id="t-coll" class="action-btn ${states.traktColl ? 'active' : ''}" onclick="toggleTrakt(${id}, '${type}', 'collection')">
-                    Trakt Collection ${states.traktColl ? '✓' : '+'}
-                </button>
-                <button id="m-watch" class="action-btn ${states.tmdbWatch ? 'active' : ''}" onclick="toggleTMDB(${id}, '${type}', 'watchlist')">
-                    TMDB Watchlist ${states.tmdbWatch ? '✓' : '+'}
-                </button>
-                <button id="m-fav" class="action-btn ${states.tmdbFav ? 'active' : ''}" onclick="toggleTMDB(${id}, '${type}', 'favorite')">
-                    TMDB Favorite ${states.tmdbFav ? '✓' : '+'}
-                </button>
-            </div>
             ${trailer ? `<a href="https://youtube.com/watch?v=${trailer.key}" target="_blank" class="trailer-btn">Watch Trailer</a>` : ''}
+            <div style="margin-top:20px;">
+                <button class="action-btn" onclick="addToTrakt(${id}, '${type}')">Add to Trakt List</button>
+                ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id})">Add to TMDB List</button>` : ''}
+            </div>
         `;
-    } catch (err) { body.innerHTML = '<p>Error loading details.</p>'; }
-}
-
-// --- Helper: Trakt API ---
-async function checkTraktStatus(id, type, listType) {
-    const token = localStorage.getItem('trakt_token');
-    if (!token) return false;
-    const res = await fetch(`https://api.trakt.tv/sync/${listType}/${type === 'movie' ? 'movies' : 'shows'}`, {
-        headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }
-    });
-    const list = await res.json();
-    return list.some(item => (item.movie?.ids.tmdb === id || item.show?.ids.tmdb === id));
-}
-
-async function toggleTrakt(id, type, listType) {
-    const token = localStorage.getItem('trakt_token');
-    const isAdding = (listType === 'watchlist') ? !states.traktWatch : !states.traktColl;
-    const url = `https://api.trakt.tv/sync/${listType}${isAdding ? '' : '/remove'}`;
-    
-    await fetch(url, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [type === 'movie' ? 'movies' : 'shows']: [{ ids: { tmdb: id } }] })
-    });
-
-    if(listType === 'watchlist') states.traktWatch = !states.traktWatch;
-    else states.traktColl = !states.traktColl;
-    
-    const btn = document.getElementById(listType === 'watchlist' ? 't-watch' : 't-coll');
-    btn.classList.toggle('active');
-    btn.textContent = `Trakt ${listType.charAt(0).toUpperCase() + listType.slice(1)} ${btn.classList.contains('active') ? '✓' : '+'}`;
-}
-
-// --- Helper: TMDB API ---
-async function checkTMDBStatus(id, type, listType) {
-    const session = localStorage.getItem('tmdb_session');
-    if (!session) return false;
-    const accRes = await fetch(`https://api.themoviedb.org/3/account?api_key=${TMDB_KEY}&session_id=${session}`);
-    const acc = await accRes.json();
-    const res = await fetch(`https://api.themoviedb.org/3/account/${acc.id}/${listType}/${type === 'movie' ? 'movies' : 'tv'}?api_key=${TMDB_KEY}&session_id=${session}`);
-    const list = await res.json();
-    return list.results.some(m => m.id === id);
-}
-
-async function toggleTMDB(id, type, listType) {
-    const session = localStorage.getItem('tmdb_session');
-    const isAdding = (listType === 'watchlist') ? !states.tmdbWatch : !states.tmdbFav;
-    const accRes = await fetch(`https://api.themoviedb.org/3/account?api_key=${TMDB_KEY}&session_id=${session}`);
-    const acc = await accRes.json();
-    
-    await fetch(`https://api.themoviedb.org/3/account/${acc.id}/${listType}?api_key=${TMDB_KEY}&session_id=${session}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ media_type: type === 'movie' ? 'movie' : 'tv', media_id: id, [listType]: isAdding })
-    });
-
-    if(listType === 'watchlist') states.tmdbWatch = !states.tmdbWatch;
-    else states.tmdbFav = !states.tmdbFav;
-
-    const btn = document.getElementById(listType === 'watchlist' ? 'm-watch' : 'm-fav');
-    btn.classList.toggle('active');
-    btn.textContent = `TMDB ${listType.charAt(0).toUpperCase() + listType.slice(1)} ${btn.classList.contains('active') ? '✓' : '+'}`;
+    } catch (err) { body.innerHTML = '<p>Error.</p>'; }
 }
 
 /* ================================
