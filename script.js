@@ -92,24 +92,49 @@ async function openSectionModal(containerId, categoryLabel, type, apiUrl) {
     
     body.innerHTML = `
         <h3 style="margin:0 0 15px 10px;">${categoryLabel}</h3>
-        <div class="grid" id="modal-grid">
-            <p style="color:gray; padding:20px;">Deep fetching top 100...</p>
-        </div>
+        <div class="grid" id="modal-grid"></div>
+        <div id="load-more-container" style="padding: 20px;"></div>
     `;
 
     try {
+        // Fetch 100 items from Trakt
         const deepUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}limit=100`;
         const res = await fetch(deepUrl, { headers: { 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }});
-        const items = await res.json();
+        const allItems = await res.json();
         
         const grid = document.getElementById('modal-grid');
-        grid.innerHTML = ''; 
+        const loadMoreContainer = document.getElementById('load-more-container');
+        
+        let currentIndex = 0;
+        const itemsPerPage = 21; // Multiples of 3 work best for a 3-column grid
 
-        items.forEach(item => {
-            const media = item.movie || item.show || item;
-            if (media.ids?.tmdb) renderCard(media.title || media.name, media.ids.tmdb, type, grid);
-        });
-    } catch (err) { body.querySelector('.grid').innerHTML = '<p>Error loading items.</p>'; }
+        function renderNextBatch() {
+            const nextBatch = allItems.slice(currentIndex, currentIndex + itemsPerPage);
+            nextBatch.forEach(item => {
+                const media = item.movie || item.show || item;
+                if (media.ids?.tmdb) renderCard(media.title || media.name, media.ids.tmdb, type, grid);
+            });
+            
+            currentIndex += itemsPerPage;
+
+            // Remove old button
+            loadMoreContainer.innerHTML = '';
+            
+            // Add new button if there are more items
+            if (currentIndex < allItems.length) {
+                const loadBtn = document.createElement('button');
+                loadBtn.className = 'action-btn';
+                loadBtn.textContent = 'See More Results';
+                loadBtn.onclick = renderNextBatch;
+                loadMoreContainer.appendChild(loadBtn);
+            }
+        }
+
+        renderNextBatch(); // Initial load
+
+    } catch (err) { 
+        document.getElementById('modal-grid').innerHTML = '<p>Error loading items.</p>'; 
+    }
 }
 
 async function showDetails(id, type) {
