@@ -69,6 +69,72 @@ function applyLibraryBadge(card, id, type) {
     card.appendChild(badge);
 }
 
+function openLibraryView(filter = 'all') {
+    const modal = document.getElementById('modal-overlay');
+    const body = document.getElementById('modal-body');
+
+    modal.classList.remove('modal-hidden');
+    setScrollLock(true);
+
+    const lib = getLibrary();
+
+    let items = [
+        ...Object.values(lib.movies),
+        ...Object.values(lib.tv)
+    ];
+
+    if (filter === 'movie') {
+        items = Object.values(lib.movies);
+    }
+
+    if (filter === 'tv') {
+        items = Object.values(lib.tv);
+    }
+
+    // Sort newest first
+    items.sort((a, b) => b.addedAt - a.addedAt);
+
+    body.innerHTML = `
+        <h3 style="margin:0 0 10px 10px;">My Library</h3>
+
+        <div style="display:flex; gap:10px; padding:10px;">
+            <button class="list-btn" onclick="openLibraryView('all')">All</button>
+            <button class="list-btn" onclick="openLibraryView('movie')">Movies</button>
+            <button class="list-btn" onclick="openLibraryView('tv')">TV</button>
+        </div>
+
+        <div class="grid" id="library-grid"></div>
+    `;
+
+    const grid = document.getElementById('library-grid');
+
+    if (items.length === 0) {
+        grid.innerHTML = `<p style="padding:20px; color:gray;">Your library is empty.</p>`;
+        return;
+    }
+
+    items.forEach(item => {
+        renderLibraryCard(item, grid);
+    });
+}
+
+function renderLibraryCard(item, container) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    card.innerHTML = `
+        ${item.poster ? `<img class="poster" src="${item.poster}" alt="${item.title}">`
+        : `<div class="poster"></div>`}
+        <div class="card-title">${item.title}</div>
+    `;
+
+    card.onclick = () => showDetails(item.id, item.type);
+
+    container.appendChild(card);
+
+    applyLibraryBadge(card, item.id, item.type);
+}
+
 /* ================================
    INIT & UTILS
 ================================ */
@@ -343,9 +409,8 @@ document.getElementById('modal-close').onclick = () => {
 };
 
 document.getElementById('nav-search').onclick = () => { document.getElementById('search-overlay').classList.remove('modal-hidden'); setScrollLock(true); };
-document.getElementById('nav-profile').onclick = () => {
-  openServiceSelector();
-};
+document.getElementById('nav-profile').onclick = () => {openServiceSelector(); };
+document.getElementById('nav-library').onclick = openLibraryView;
 document.getElementById('search-close').onclick = () => { document.getElementById('search-overlay').classList.add('modal-hidden'); setScrollLock(false); wasSearchOpen = false; };
 document.getElementById('login-trakt').onclick = loginTrakt;
 document.getElementById('login-tmdb').onclick = loginTMDB;
