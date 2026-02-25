@@ -210,10 +210,12 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
-  gap: 12px;
+  /* Automatically fits as many posters as possible, minimum 100px wide */
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 15px; /* Increased gap for breathing room */
   padding: 15px;
-  padding-bottom: 120px;
+  /* Remove fixed height and overflow here; let the modal-body handle it */
+  padding-bottom: 80px; 
 }
 
 /* Ensure posters inside the grid don't distort */
@@ -312,8 +314,12 @@ h1 {
    MODAL GRID FOR SEE MORE
 ================================ */
 #modal-body .grid {
-  grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
-  gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    max-height: 70vh; /* scrollable modal area */
+    overflow-y: auto;
+    padding-bottom: 20px;
 }
 
 /* Optional: add some spacing for modal title */
