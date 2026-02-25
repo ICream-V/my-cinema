@@ -1,18 +1,20 @@
 /* ================================
-   CONFIG & STATE
+   CONFIG
 ================================ */
 const TRAKT_ID = 'caae7a3191de89620d5a2f2955ebce640215e6a81b0cc7657b773de5edebfd40';
 const TRAKT_SECRET = '35a89bd5967a9151de677fd44a4872ab93efba1cc09fee80c27b9176459ece46';
 const TMDB_KEY = '37cc8cb617e62d17e6180754e7a94139';
 const REDIRECT_URI = 'https://icream-v.github.io/my-cinema/';
 
-let wasSearchOpen = false;
-let currentPage = 1;
-const posterCache = {};
-const sectionDataCache = {};
+/* ================================
+   STATE & CACHE
+================================ */
+let wasSearchOpen = false; 
+const posterCache = {};         
+const sectionDataCache = {};    
 
 /* ================================
-   INIT & AUTH
+   INIT & UTILS
 ================================ */
 init();
 handleOAuthCallback();
@@ -22,19 +24,22 @@ async function init() {
     fetchTrakt('https://api.trakt.tv/movies/trending', 'trending-movies', 'movie', 'Trending Movies');
     fetchTrakt('https://api.trakt.tv/shows/popular', 'popular-shows', 'tv', 'Popular TV Shows');
     fetchTrakt('https://api.trakt.tv/shows/anticipated', 'anticipated', 'tv', 'Most Anticipated');
-    setupBackToTop();
 }
 
-function handleOAuthCallback() {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('code') && !localStorage.getItem('trakt_token')) exchangeTraktToken(params.get('code'));
-    if (params.get('approved') === 'true') createTMDBSession();
+function setScrollLock(lock) {
+    document.body.style.overflow = lock ? 'hidden' : '';
+    document.body.style.position = lock ? 'fixed' : '';
+    document.body.style.width = lock ? '100%' : '';
+}
+
+function cleanURL() {
+    window.history.replaceState({}, document.title, window.location.pathname);
 }
 
 /* ================================
-   FETCH & RENDER (HOME)
+   FETCH & RENDER
 ================================ */
-async function fetchTrakt(url, containerId, type, label) {
+async function fetchTrakt(url, containerId, type, categoryLabel) {
     try {
         const res = await fetch(url, { headers: { 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }});
         const data = await res.json();
@@ -48,10 +53,10 @@ async function fetchTrakt(url, containerId, type, label) {
 
         const seeMore = document.createElement('div');
         seeMore.className = 'card see-more';
-        seeMore.innerHTML = `<div class="poster" style="display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:bold;">See More</div>`;
-        seeMore.onclick = () => openSectionModal(label, type, url);
+        seeMore.innerHTML = `<div class="poster" style="display:flex;align-items:center;justify-content:center;background:#2c2c2e;color:var(--accent);font-weight:bold;">See More</div>`;
+        seeMore.onclick = () => openSectionModal(containerId, categoryLabel, type, url);
         container.appendChild(seeMore);
-    } catch (e) { console.error(e); }
+    } catch (err) { console.error(err); }
 }
 
 async function renderCard(title, id, type, container) {
@@ -62,65 +67,59 @@ async function renderCard(title, id, type, container) {
     container.appendChild(card);
 
     if (posterCache[id]) {
-        card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}">`;
-    } else {
-        try {
-            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
-            const data = await res.json();
-            if (data.poster_path) {
-                posterCache[id] = `https://image.tmdb.org/t/p/w185${data.poster_path}`;
-                card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}">`;
-            }
-        } catch (e) {}
+        card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
+        return;
     }
+
+    try {
+        const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
+        const data = await res.json();
+        if (data.poster_path) {
+            posterCache[id] = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
+            card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
+        }
+    } catch (err) { console.error(err); }
 }
 
 /* ================================
-   MODALS & PAGINATION
+   SEE MORE (DEEP FETCH)
 ================================ */
-async function openSectionModal(label, type, apiUrl) {
-    currentPage = 1;
+async function openSectionModal(containerId, categoryLabel, type, apiUrl) {
+    const modal = document.getElementById('modal-overlay');
+    const body = document.getElementById('modal-body');
     setScrollLock(true);
-    const modal = document.getElementById('modal-overlay');
     modal.classList.remove('modal-hidden');
-    const body = document.getElementById('modal-body');
-    body.innerHTML = `<h3>${label}</h3><div class="grid" id="modal-grid"></div>`;
     
-    const grid = document.getElementById('modal-grid');
-    grid.addEventListener('scroll', handleScroll);
-    loadNextPage(apiUrl, type, grid);
+    body.innerHTML = `
+        <h3 style="margin:0 0 15px 10px;">${categoryLabel}</h3>
+        <div class="grid" id="modal-grid">
+            <p style="color:gray; padding:20px;">Deep fetching top 100...</p>
+        </div>
+    `;
+
+    try {
+        const deepUrl = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}limit=100`;
+        const res = await fetch(deepUrl, { headers: { 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }});
+        const items = await res.json();
+        
+        const grid = document.getElementById('modal-grid');
+        grid.innerHTML = ''; 
+
+        items.forEach(item => {
+            const media = item.movie || item.show || item;
+            if (media.ids?.tmdb) renderCard(media.title || media.name, media.ids.tmdb, type, grid);
+        });
+    } catch (err) { body.querySelector('.grid').innerHTML = '<p>Error loading items.</p>'; }
 }
 
-async function loadNextPage(apiUrl, type, grid) {
-    const oldBtn = grid.querySelector('.load-more-btn');
-    if (oldBtn) oldBtn.remove();
-    
-    const url = `${apiUrl}${apiUrl.includes('?') ? '&' : '?'}limit=40&page=${currentPage}`;
-    const res = await fetch(url, { headers: { 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }});
-    const items = await res.json();
-
-    items.forEach(item => {
-        const media = item.movie || item.show || item;
-        if (media.ids?.tmdb) renderCard(media.title || media.name, media.ids.tmdb, type, grid);
-    });
-
-    const moreBtn = document.createElement('button');
-    moreBtn.className = 'load-more-btn';
-    moreBtn.textContent = `Load Page ${currentPage + 1}`;
-    moreBtn.onclick = () => { currentPage++; loadNextPage(apiUrl, type, grid); };
-    grid.appendChild(moreBtn);
-}
-
-/* ================================
-   SHOW DETAILS (RESTORED ACTIONS)
-================================ */
 async function showDetails(id, type) {
-    const search = document.getElementById('search-overlay');
-    wasSearchOpen = !search.classList.contains('modal-hidden');
-    if (wasSearchOpen) search.classList.add('modal-hidden');
-
     const modal = document.getElementById('modal-overlay');
     const body = document.getElementById('modal-body');
+    const searchOverlay = document.getElementById('search-overlay');
+
+    wasSearchOpen = !searchOverlay.classList.contains('modal-hidden');
+    if (wasSearchOpen) searchOverlay.classList.add('modal-hidden');
+
     modal.classList.remove('modal-hidden');
     setScrollLock(true);
     body.innerHTML = '<p style="text-align:center; padding-top:50px;">Loading...</p>';
@@ -134,18 +133,18 @@ async function showDetails(id, type) {
             <img class="details-poster" src="https://image.tmdb.org/t/p/w780${data.backdrop_path || data.poster_path}">
             <div class="details-title">${data.title || data.name}</div>
             <div style="color:var(--accent); margin:10px 0;">★ ${data.vote_average?.toFixed(1) || 'N/A'}</div>
-            <div class="details-overview">${data.overview || 'No description.'}</div>
+            <div class="details-overview">${data.overview || 'No description available.'}</div>
             ${trailer ? `<a href="https://youtube.com/watch?v=${trailer.key}" target="_blank" class="trailer-btn">Watch Trailer</a>` : ''}
             <div style="margin-top:20px;">
                 <button class="action-btn" onclick="addToTrakt(${id}, '${type}')">Add to Trakt List</button>
                 ${type === 'movie' ? `<button class="action-btn" onclick="addToTMDB(${id})">Add to TMDB List</button>` : ''}
             </div>
         `;
-    } catch (e) { body.innerHTML = 'Error loading details.'; }
+    } catch (err) { body.innerHTML = '<p>Error.</p>'; }
 }
 
 /* ================================
-   LIST ACTIONS (RESTORED METADATA)
+   LIST SELECTOR (METADATA)
 ================================ */
 async function showListSelector(lists, callback) {
     const body = document.getElementById('modal-body');
@@ -154,7 +153,7 @@ async function showListSelector(lists, callback) {
 
     for (const list of lists) {
         const btn = document.createElement('button');
-        btn.className = 'list-btn';
+        btn.className = 'list-btn'; 
         let label = list.name;
 
         if (tmdbSession && list.id && list.item_count !== undefined) {
@@ -163,10 +162,11 @@ async function showListSelector(lists, callback) {
                 const details = await res.json();
                 const types = new Set(details.items.map(i => i.media_type));
                 let typeLabel = types.size === 1 ? (types.has('movie') ? 'Movies' : 'TV') : 'Mixed';
-                label += ` (${typeLabel}, ${details.items.length})`;
-            } catch (e) { label += ` (${list.item_count})`; }
-        } else if (list.item_count) {
-            label += ` (${list.item_count})`;
+                label += ` (${typeLabel}, ${details.items.length} items)`;
+            } catch (e) { label += ` (${list.item_count} items)`; }
+        } 
+        else if (list.ids?.slug) {
+            if (list.item_count) label += ` (${list.item_count} items)`;
         }
 
         btn.textContent = label;
@@ -175,112 +175,13 @@ async function showListSelector(lists, callback) {
     }
 }
 
-function addToTrakt(id, type) {
-    const token = localStorage.getItem('trakt_token');
-    if (!token) { loginTrakt(); return; }
-    fetch('https://api.trakt.tv/users/me/lists', { headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }})
-    .then(r => r.json()).then(lists => showListSelector(lists, async (listId) => {
-        await fetch(`https://api.trakt.tv/users/me/lists/${listId}/items`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ [type === 'movie' ? 'movies' : 'shows']: [{ ids: { tmdb: id } }] })
-        });
-        alert('Added!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
-    }));
-}
-
-function addToTMDB(id) {
-    const session = localStorage.getItem('tmdb_session');
-    if (!session) { loginTMDB(); return; }
-    fetch(`https://api.themoviedb.org/3/account?api_key=${TMDB_KEY}&session_id=${session}`)
-    .then(r => r.json()).then(acc => fetch(`https://api.themoviedb.org/3/account/${acc.id}/lists?api_key=${TMDB_KEY}&session_id=${session}`))
-    .then(r => r.json()).then(lists => showListSelector(lists.results, async (listId) => {
-        await fetch(`https://api.themoviedb.org/3/list/${listId}/add_item?api_key=${TMDB_KEY}&session_id=${session}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ media_id: id })
-        });
-        alert('Added!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
-    }));
-}
-
 /* ================================
-   UI UTILS (SCROLL, BACK TO TOP)
+   AUTHENTICATION & ACTIONS
 ================================ */
-function setScrollLock(lock) {
-    document.body.style.overflow = lock ? 'hidden' : '';
-    document.body.style.position = lock ? 'fixed' : '';
-    document.body.style.width = lock ? '100%' : '';
-}
-
-function setupBackToTop() {
-    const btn = document.createElement('button');
-    btn.id = 'back-to-top';
-    btn.innerHTML = '↑';
-    document.body.appendChild(btn);
-    btn.onclick = () => {
-        const active = document.querySelector('#modal-grid, #search-results');
-        if (active) active.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-}
-
-function handleScroll(e) {
-    const btn = document.getElementById('back-to-top');
-    if (btn) btn.style.display = e.target.scrollTop > 400 ? 'flex' : 'none';
-}
-
-function cleanURL() {
-    window.history.replaceState({}, document.title, window.location.pathname);
-}
-
-/* ================================
-   SEARCH & AUTH BUTTONS
-================================ */
-document.getElementById('nav-search').onclick = () => {
-    document.getElementById('search-overlay').classList.remove('modal-hidden');
-    setScrollLock(true);
-};
-
-document.getElementById('search-close').onclick = () => {
-    document.getElementById('search-overlay').classList.add('modal-hidden');
-    setScrollLock(false);
-};
-
-document.getElementById('modal-close').onclick = () => {
-    document.getElementById('modal-overlay').classList.add('modal-hidden');
-    if (wasSearchOpen) {
-        document.getElementById('search-overlay').classList.remove('modal-hidden');
-        wasSearchOpen = false;
-    } else setScrollLock(false);
-};
-
-// Search Logic
-let searchTimer;
-document.getElementById('search-input').oninput = (e) => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(async () => {
-        const query = e.target.value.trim();
-        if (query.length < 3) return;
-        const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}`);
-        const data = await res.json();
-        const results = document.getElementById('search-results');
-        results.innerHTML = '';
-        results.addEventListener('scroll', handleScroll);
-        data.results.forEach(item => {
-            if (item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv')) {
-                renderCard(item.title || item.name, item.id, item.media_type, results);
-            }
-        });
-    }, 500);
-};
-
-// Auth UI Logic
-function loginTrakt() { window.location.href = `https://api.trakt.tv/oauth/authorize?response_type=code&client_id=${TRAKT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`; }
-async function loginTMDB() {
-    const res = await fetch(`https://api.themoviedb.org/3/authentication/token/new?api_key=${TMDB_KEY}`);
-    const data = await res.json();
-    localStorage.setItem('tmdb_request_token', data.request_token);
-    window.location.href = `https://www.themoviedb.org/authenticate/${data.request_token}?redirect_to=${encodeURIComponent(REDIRECT_URI)}`;
+function handleOAuthCallback() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('code') && !localStorage.getItem('trakt_token')) exchangeTraktToken(params.get('code'));
+    if (params.get('approved') === 'true') createTMDBSession();
 }
 
 async function exchangeTraktToken(code) {
@@ -304,15 +205,76 @@ async function createTMDBSession() {
 }
 
 function updateAuthUI() {
-    if (localStorage.getItem('trakt_token')) { 
-        const b = document.getElementById('login-trakt'); 
-        if(b) { b.textContent = "Trakt ✓"; b.style.background = "#34c759"; b.disabled = true; }
-    }
-    if (localStorage.getItem('tmdb_session')) { 
-        const b = document.getElementById('login-tmdb'); 
-        if(b) { b.textContent = "TMDB ✓"; b.style.background = "#34c759"; b.disabled = true; }
-    }
+    if (localStorage.getItem('trakt_token')) { const b = document.getElementById('login-trakt'); b.textContent = "Trakt ✓"; b.style.background = "#34c759"; b.disabled = true; }
+    if (localStorage.getItem('tmdb_session')) { const b = document.getElementById('login-tmdb'); b.textContent = "TMDB ✓"; b.style.background = "#34c759"; b.disabled = true; }
 }
 
+function loginTrakt() { window.location.href = `https://api.trakt.tv/oauth/authorize?response_type=code&client_id=${TRAKT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`; }
+async function loginTMDB() {
+    const res = await fetch(`https://api.themoviedb.org/3/authentication/token/new?api_key=${TMDB_KEY}`);
+    const data = await res.json();
+    localStorage.setItem('tmdb_request_token', data.request_token);
+    window.location.href = `https://www.themoviedb.org/authenticate/${data.request_token}?redirect_to=${encodeURIComponent(REDIRECT_URI)}`;
+}
+
+function addToTrakt(id, type) {
+    const token = localStorage.getItem('trakt_token');
+    if (!token) { loginTrakt(); return; }
+    fetch('https://api.trakt.tv/users/me/lists', { headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID }})
+    .then(r => r.json()).then(lists => showListSelector(lists, async (listId) => {
+        await fetch(`https://api.trakt.tv/users/me/lists/${listId}/items`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'trakt-api-version': '2', 'trakt-api-key': TRAKT_ID, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [type === 'movie' ? 'movies' : 'shows']: [{ ids: { tmdb: id } }] })
+        });
+        alert('Added to Trakt!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
+    }));
+}
+
+function addToTMDB(id) {
+    const session = localStorage.getItem('tmdb_session');
+    if (!session) { loginTMDB(); return; }
+    fetch(`https://api.themoviedb.org/3/account?api_key=${TMDB_KEY}&session_id=${session}`)
+    .then(r => r.json()).then(acc => fetch(`https://api.themoviedb.org/3/account/${acc.id}/lists?api_key=${TMDB_KEY}&session_id=${session}`))
+    .then(r => r.json()).then(lists => showListSelector(lists.results, async (listId) => {
+        await fetch(`https://api.themoviedb.org/3/list/${listId}/add_item?api_key=${TMDB_KEY}&session_id=${session}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ media_id: id })
+        });
+        alert('Added to TMDB!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
+    }));
+}
+
+/* ================================
+   CONTROLS & SEARCH
+================================ */
+document.getElementById('modal-close').onclick = () => {
+    document.getElementById('modal-overlay').classList.add('modal-hidden');
+    if (wasSearchOpen) { document.getElementById('search-overlay').classList.remove('modal-hidden'); wasSearchOpen = false; }
+    else setScrollLock(false);
+};
+
+document.getElementById('nav-search').onclick = () => { document.getElementById('search-overlay').classList.remove('modal-hidden'); setScrollLock(true); };
+document.getElementById('search-close').onclick = () => { document.getElementById('search-overlay').classList.add('modal-hidden'); setScrollLock(false); wasSearchOpen = false; };
 document.getElementById('login-trakt').onclick = loginTrakt;
 document.getElementById('login-tmdb').onclick = loginTMDB;
+
+let searchTimer;
+document.getElementById('search-input').oninput = (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+        const query = e.target.value.trim();
+        if (query.length < 3) return;
+        const res = await fetch(`https://api.themoviedb.org/3/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        const results = document.getElementById('search-results');
+        results.innerHTML = '';
+        data.results.forEach(item => {
+            if (item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv')) {
+                if (!posterCache[item.id]) posterCache[item.id] = `https://image.tmdb.org/t/p/w342${item.poster_path}`;
+                renderCard(item.title || item.name, item.id, item.media_type, results);
+            }
+        });
+    }, 500);
+};
