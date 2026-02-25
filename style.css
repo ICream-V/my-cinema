@@ -210,14 +210,25 @@ h1 {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 20px;
-  overflow-y: auto;
-  height: calc(100vh - 120px);
-  padding-bottom: 50px;
+  /* Automatically fits as many posters as possible, minimum 100px wide */
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 15px; /* Increased gap for breathing room */
+  padding: 15px;
+  /* Remove fixed height and overflow here; let the modal-body handle it */
+  padding-bottom: 80px; 
 }
 
+/* Ensure posters inside the grid don't distort */
+.grid .card {
+  width: 100%;
+}
+
+.grid .poster {
+  width: 100%;
+  aspect-ratio: 2/3;
+  object-fit: cover;
+  border-radius: 8px;
+}
 .auth-btn {
   background: var(--accent);
   border: none;
