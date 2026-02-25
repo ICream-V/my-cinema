@@ -49,6 +49,26 @@ function addToLibrary(id, type, title, poster) {
     saveLibrary(lib);
 }
 
+function applyLibraryBadge(card, id, type) {
+    if (!isInLibrary(id, type)) return;
+
+    if (card.querySelector('.library-badge')) return;
+
+    const badge = document.createElement('div');
+    badge.className = 'library-badge';
+    badge.textContent = '📚';
+    badge.style.position = 'absolute';
+    badge.style.top = '6px';
+    badge.style.right = '6px';
+    badge.style.fontSize = '16px';
+    badge.style.background = 'rgba(0,0,0,0.7)';
+    badge.style.padding = '4px';
+    badge.style.borderRadius = '6px';
+
+    card.style.position = 'relative';
+    card.appendChild(badge);
+}
+
 /* ================================
    INIT & UTILS
 ================================ */
@@ -115,22 +135,22 @@ async function renderCard(title, id, type, container) {
             card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
         }
     } catch (err) { console.error(err); }
-
-   // Library badge
-if (isInLibrary(id, type)) {
-    const badge = document.createElement('div');
-    badge.textContent = '📚';
-    badge.style.position = 'absolute';
-    badge.style.top = '6px';
-    badge.style.right = '6px';
-    badge.style.fontSize = '16px';
-    badge.style.background = 'rgba(0,0,0,0.7)';
-    badge.style.padding = '4px';
-    badge.style.borderRadius = '6px';
-
-    card.style.position = 'relative';
-    card.appendChild(badge);
+applyLibraryBadge(card, id, type);
 }
+
+function refreshLibraryBadges() {
+    document.querySelectorAll('.card').forEach(card => {
+        const onclick = card.getAttribute('onclick');
+        if (!onclick) return;
+
+        const match = onclick.match(/showDetails\((\d+), '(\w+)'\)/);
+        if (!match) return;
+
+        const id = match[1];
+        const type = match[2];
+
+        applyLibraryBadge(card, id, type);
+    });
 }
 
 /* ================================
@@ -285,6 +305,7 @@ function addToTrakt(id, type, title, posterPath) {
     title,
     posterPath ? `https://image.tmdb.org/t/p/w342${posterPath}` : null
 );
+       refreshLibraryBadges();
 
 alert('Added to Trakt & Library!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
     }));
@@ -307,7 +328,7 @@ function addToTMDB(id, title, posterPath) {
     title,
     posterPath ? `https://image.tmdb.org/t/p/w342${posterPath}` : null
 );
-
+refreshLibraryBadges();
 alert('Added to TMDB & Library!'); document.getElementById('modal-overlay').classList.add('modal-hidden'); setScrollLock(false);
     }));
 }
