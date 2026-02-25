@@ -126,9 +126,6 @@ h1 {
   z-index: 1000;
 }
 
-/* ---------------------------
-   MODAL CONTENT
---------------------------- */
 #modal-content {
   position: absolute;
   bottom: 0;
@@ -186,14 +183,6 @@ h1 {
   box-sizing: border-box;
 }
 
-/* ---------------------------
-   SEARCH OVERLAY
---------------------------- */
-#search-overlay {
-  display: flex;
-  flex-direction: column;
-}
-
 .search-header {
   display: flex;
   padding: 60px 20px 15px;
@@ -219,31 +208,17 @@ h1 {
   font-size: 16px;
 }
 
-#search-results {
-  flex: 1; /* fill available space */
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-  padding: 15px;
-  overflow-y: auto; /* allow scroll */
-}
-
-#search-results .card {
-  min-width: 0;
-  max-width: 100%;
-}
-
-/* ---------------------------
-   GRID (DEFAULT)
---------------------------- */
 .grid {
   display: grid;
+  /* Automatically fits as many posters as possible, minimum 100px wide */
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 15px;
+  gap: 15px; /* Increased gap for breathing room */
   padding: 15px;
+  /* Remove fixed height and overflow here; let the modal-body handle it */
   padding-bottom: 80px; 
 }
 
+/* Ensure posters inside the grid don't distort */
 .grid .card {
   width: 100%;
 }
@@ -254,43 +229,6 @@ h1 {
   object-fit: cover;
   border-radius: 8px;
 }
-
-/* ---------------------------
-   MODAL GRID FOR SEE MORE
---------------------------- */
-#modal-body .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); /* responsive 3-4 columns */
-  gap: 10px;
-  max-height: 70vh;
-  overflow-y: auto;
-  padding-bottom: 20px;
-}
-
-#modal-body .card {
-  min-width: 0; /* prevents overflow in grid */
-}
-
-#modal-body .poster {
-  aspect-ratio: 2/3;
-  object-fit: cover;
-  border-radius: 6px; /* smaller poster for modal */
-}
-
-#modal-body h3 {
-  color: var(--text);
-  font-size: 20px;
-  font-weight: 800;
-  margin-bottom: 10px;
-}
-
-#modal-body .card-title {
-  font-size: 12px;
-}
-
-/* ---------------------------
-   BUTTONS & AUTH
---------------------------- */
 .auth-btn {
   background: var(--accent);
   border: none;
@@ -310,67 +248,95 @@ h1 {
   color: white;
   font-weight: bold;
 }
-
 .list-btn {
-  display: block;
-  width: 100%;
-  padding: 12px;
-  margin-bottom: 10px;
-  border-radius: 10px;
-  border: none;
-  background: var(--accent);
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-  text-align: left;
+    display: block;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 10px; /* vertical spacing */
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    text-align: left;
 }
-
 .list-btn:disabled {
-  background: #555;
-  cursor: not-allowed;
-  opacity: 0.7;
+    background: #555;
+    cursor: not-allowed;
+    opacity: 0.7;
 }
-
 .list-btn .media-type {
-  font-size: 12px;
-  color: #ccc;
-  margin-left: 10px;
+    font-size: 12px;
+    color: #ccc;
+    margin-left: 10px;
 }
-
 /* ================================
    SEE MORE CARD
 ================================ */
 .card.see-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(10, 132, 255, 0.2);
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 14px;
-  text-align: center;
-  cursor: pointer;
-  transition: transform 0.2s, background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 132, 255, 0.2); /* light accent overlay */
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.2s;
 }
 
 .card.see-more:hover {
-  transform: scale(1.05);
-  background: rgba(10, 132, 255, 0.3);
+    transform: scale(1.05);
+    background: rgba(10, 132, 255, 0.3);
 }
 
 .card.see-more .poster {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 16px;
-  height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+    height: 100%;
 }
 
+/* Optional: add plus icon above "See More" text */
 .card.see-more .poster::before {
-  content: "+";
-  font-size: 24px;
-  display: block;
-  margin-bottom: 5px;
-  color: var(--accent);
+    content: "+";
+    font-size: 24px;
+    display: block;
+    margin-bottom: 5px;
+    color: var(--accent);
+}
+
+/* ================================
+   MODAL GRID FOR SEE MORE
+================================ */
+#modal-body .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    max-height: 70vh; /* scrollable modal area */
+    overflow-y: auto;
+    padding-bottom: 20px;
+}
+
+/* Optional: add some spacing for modal title */
+#modal-body h3 {
+    color: var(--text);
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 10px;
+}
+
+/* Adjust card titles inside modal */
+#modal-body .card-title {
+    font-size: 12px;
+}
+
+/* Adjust poster size inside modal grid if needed */
+#modal-body .poster {
+    aspect-ratio: 2/3;
+    object-fit: cover;
 }
