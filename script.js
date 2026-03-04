@@ -628,12 +628,16 @@ function renderTraktItems(items) {
     grid.innerHTML = '';
 
     items.forEach(item => {
+        // Trakt wraps data: item.movie OR item.show
         const media = item.movie || item.show;
+        // Map 'show' to 'tv' for TMDB compatibility
+        const mediaType = item.type === 'show' ? 'tv' : (item.type || (item.movie ? 'movie' : 'tv'));
+
         if (media?.ids?.tmdb) {
             renderCard(
                 media.title || media.name,
                 media.ids.tmdb,
-                item.type || (item.movie ? 'movie' : 'tv'),
+                mediaType,
                 grid
             );
         }
