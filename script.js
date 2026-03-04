@@ -261,40 +261,70 @@ async function fetchTrakt(url, containerId, type, categoryLabel) {
     } catch (err) { console.error(err); }
 }
 
-async function renderCard(title, id, type, container) {
+function renderCard(title, id, type, container, posterUrl = null) {
     const card = document.createElement('div');
     card.className = 'card';
-    card.innerHTML = `<div class="poster"></div><div class="card-title">${title}</div>`;
-    card.onclick = () => showDetails(id, type);
+    
+    // Attach data attributes for easy badge handling
+    card.dataset.id = id;
+    card.dataset.type = type;
+
+    card.innerHTML = `
+        <div class="poster"></div>
+        <div class="card-title">${title}</div>
+    `;
+
+    // Click handlers for details
+    card.querySelector('.poster').onclick = () => showDetails(id, type);
+    card.querySelector('.card-title').onclick = () => showDetails(id, type);
+
+    // Trash icon (for library cards)
+    const trash = document.createElement('div');
+    trash.innerHTML = '🗑️';
+    trash.style.cssText = 'position:absolute; top:6px; left:6px; font-size:16px; background:rgba(0,0,0,0.6); padding:3px; border-radius:4px; cursor:pointer;';
+    trash.title = 'Remove from Library';
+    trash.onclick = (e) => {
+        e.stopPropagation();
+        const lib = getLibrary();
+        const key = type === 'movie' ? 'movies' : 'tv';
+        delete lib[key][id];
+        saveLibrary(lib);
+        container.removeChild(card);
+    };
+    card.style.position = 'relative';
+    card.appendChild(trash);
+
     container.appendChild(card);
 
-    if (posterCache[id]) {
-        card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
-        return;
-    }
-
-    try {
-        const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
-        const data = await res.json();
-        if (data.poster_path) {
-            posterCache[id] = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
-            card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
+    // Render poster
+    (async () => {
+        try {
+            let poster = posterUrl || posterCache[id];
+            if (!poster) {
+                // Fetch from TMDB if not cached
+                const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
+                const data = await res.json();
+                poster = data.poster_path ? `https://image.tmdb.org/t/p/w342${data.poster_path}` : null;
+                if (poster) posterCache[id] = poster;
+            }
+            if (poster) {
+                const posterDiv = card.querySelector('.poster');
+                posterDiv.outerHTML = `<img class="poster" src="${poster}" alt="${title}">`;
+            }
+        } catch (err) {
+            console.error('Error fetching poster:', err);
+        } finally {
+            // Apply library badge after poster is set
+            applyLibraryBadge(card, id, type);
         }
-    } catch (err) { console.error(err); }
-applyLibraryBadge(card, id, type);
+    })();
 }
 
 function refreshLibraryBadges() {
     document.querySelectorAll('.card').forEach(card => {
-        const onclick = card.getAttribute('onclick');
-        if (!onclick) return;
-
-        const match = onclick.match(/showDetails\((\d+), '(\w+)'\)/);
-        if (!match) return;
-
-        const id = match[1];
-        const type = match[2];
-
+        const id = card.dataset.id;
+        const type = card.dataset.type;
+        if (!id || !type) return;
         applyLibraryBadge(card, id, type);
     });
 }
@@ -624,13 +654,20 @@ function renderTraktItems(items) {
     items.forEach(item => {
         const media = item.movie || item.show;
         if (media?.ids?.tmdb) {
-            renderCard(
-                media.title || media.name,
-                media.ids.tmdb,
-                item.type || (item.movie ? 'movie' : 'tv'),
-                grid
-            );
-        }
+    // If the media exists in your library, reuse poster
+    const lib = getLibrary();
+    const key = (item.type === 'movie' || media.movie) ? 'movies' : 'tv';
+    const stored = lib[key]?.[media.ids.tmdb];
+    const posterUrl = stored?.poster || null;
+
+    renderCard(
+        media.title || media.name,
+        media.ids.tmdb,
+        item.type || (media.movie ? 'movie' : 'tv'),
+        grid,
+        posterUrl
+    );
+}
     });
 }
 
