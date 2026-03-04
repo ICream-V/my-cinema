@@ -545,37 +545,39 @@ async function loadTraktLists() {
     const body = document.getElementById('modal-body');
     body.innerHTML = '<h3>Trakt Lists</h3>';
 
-    /* --- System Lists --- */
-    const systemLists = [
-        { name: "Watchlist", endpoint: "/users/me/watchlist/movies,shows" }
-    ];
+    // 1. Add Watchlist (System List)
+    const watchlistBtn = document.createElement('button');
+    watchlistBtn.className = 'list-btn';
+    watchlistBtn.textContent = "Watchlist";
+    watchlistBtn.onclick = () => openTraktSystemList('/users/me/watchlist/movies,shows');
+    body.appendChild(watchlistBtn);
 
-    systemLists.forEach(list => {
-        const btn = document.createElement('button');
-        btn.className = 'list-btn';
-        btn.textContent = list.name;
-        btn.onclick = () => openTraktSystemList(list.endpoint);
-        body.appendChild(btn);
-    });
+    // 2. Fetch Custom Lists
+    try {
+        const res = await fetch('https://api.trakt.tv/users/me/lists', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'trakt-api-version': '2',
+                'trakt-api-key': TRAKT_ID
+            }
+        });
 
-    /* --- Custom Lists --- */
-    const res = await fetch('https://api.trakt.tv/users/me/lists', {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'trakt-api-version': '2',
-            'trakt-api-key': TRAKT_ID
-        }
-    });
+        if (!res.ok) throw new Error("Trakt API error");
 
-    const lists = await res.json();
+        const lists = await res.json();
 
-    lists.forEach(list => {
-        const btn = document.createElement('button');
-        btn.className = 'list-btn';
-        btn.textContent = `${list.name} (${list.item_count})`;
-        btn.onclick = () => openTraktCustomList(list.ids.slug);
-        body.appendChild(btn);
-    });
+        lists.forEach(list => {
+            const btn = document.createElement('button');
+            btn.className = 'list-btn';
+            // Custom lists use the 'slug' for the URL but 'name' for the label
+            btn.textContent = `${list.name} (${list.item_count || 0})`;
+            btn.onclick = () => openTraktCustomList(list.ids.slug);
+            body.appendChild(btn);
+        });
+    } catch (err) {
+        console.error("Failed to load Trakt lists", err);
+        body.innerHTML += '<p style="color:red; padding:10px;">Error loading custom lists.</p>';
+    }
 }
 
 async function openTraktSystemList(endpoint) {
@@ -604,42 +606,48 @@ async function openTraktCustomList(slug) {
     const body = document.getElementById('modal-body');
 
     body.innerHTML = `
-        <h3>Loading...</h3>
+        <h3 style="display:flex; align-items:center; gap:10px;">
+            <span onclick="loadTraktLists()" style="cursor:pointer;">⬅️</span> 
+            Loading List...
+        </h3>
         <div class="grid" id="modal-grid"></div>
     `;
 
-    const res = await fetch(
-        `https://api.trakt.tv/users/me/lists/${slug}/items`,
-        {
+    try {
+        const res = await fetch(`https://api.trakt.tv/users/me/lists/${slug}/items`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'trakt-api-version': '2',
                 'trakt-api-key': TRAKT_ID
             }
-        }
-    );
+        });
 
-    const items = await res.json();
-    renderTraktItems(items);
+        const items = await res.json();
+        renderTraktItems(items);
+    } catch (err) {
+        console.error("Error fetching list items", err);
+        document.getElementById('modal-grid').innerHTML = '<p>Error loading items.</p>';
+    }
 }
 
 function renderTraktItems(items) {
     const grid = document.getElementById('modal-grid');
+    if (!grid) return;
     grid.innerHTML = '';
 
-    items.forEach(item => {
-        // Trakt wraps data: item.movie OR item.show
-        const media = item.movie || item.show;
-        // Map 'show' to 'tv' for TMDB compatibility
-        const mediaType = item.type === 'show' ? 'tv' : (item.type || (item.movie ? 'movie' : 'tv'));
+    if (!items || items.length === 0) {
+        grid.innerHTML = '<p style="color:gray; padding:20px;">No items found in this list.</p>';
+        return;
+    }
 
-        if (media?.ids?.tmdb) {
-            renderCard(
-                media.title || media.name,
-                media.ids.tmdb,
-                mediaType,
-                grid
-            );
+    items.forEach(item => {
+        // Trakt's nested structure
+        const media = item.movie || item.show;
+        // Map 'show' to 'tv' for TMDB poster fetching
+        const type = item.movie ? 'movie' : 'tv';
+
+        if (media && media.ids && media.ids.tmdb) {
+            renderCard(media.title || media.name, media.ids.tmdb, type, grid);
         }
     });
 }
