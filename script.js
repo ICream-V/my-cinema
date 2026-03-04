@@ -298,26 +298,30 @@ function renderCard(title, id, type, container, posterUrl = null) {
 
     // Render poster
     (async () => {
-        try {
-            let poster = posterUrl || posterCache[id];
-            if (!poster) {
-                // Fetch from TMDB if not cached
-                const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
-                const data = await res.json();
-                poster = data.poster_path ? `https://image.tmdb.org/t/p/w342${data.poster_path}` : null;
-                if (poster) posterCache[id] = poster;
-            }
-            if (poster) {
-                const posterDiv = card.querySelector('.poster');
-                posterDiv.outerHTML = `<img class="poster" src="${poster}" alt="${title}">`;
-            }
-        } catch (err) {
-            console.error('Error fetching poster:', err);
-        } finally {
-            // Apply library badge after poster is set
-            applyLibraryBadge(card, id, type);
+    try {
+        let poster = posterUrl || posterCache[id];
+        if (!poster) {
+            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
+            const data = await res.json();
+
+            // Determine correct title and poster based on type
+            const mediaTitle = type === 'movie' ? data.title : data.name;
+            poster = data.poster_path ? `https://image.tmdb.org/t/p/w342${data.poster_path}` : null;
+
+            if (poster) posterCache[id] = poster;
+            card.querySelector('.card-title').textContent = mediaTitle; // Update title
         }
-    })();
+
+        if (poster) {
+            const posterDiv = card.querySelector('.poster');
+            posterDiv.outerHTML = `<img class="poster" src="${poster}" alt="${title}">`;
+        }
+    } catch (err) {
+        console.error('Error fetching poster:', err);
+    } finally {
+        applyLibraryBadge(card, id, type);
+    }
+})();
 }
 
 function refreshLibraryBadges() {
@@ -536,11 +540,11 @@ document.getElementById('search-input').oninput = (e) => {
         const results = document.getElementById('search-results');
         results.innerHTML = '';
         data.results.forEach(item => {
-            if (item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv')) {
-                if (!posterCache[item.id]) posterCache[item.id] = `https://image.tmdb.org/t/p/w342${item.poster_path}`;
-                renderCard(item.title || item.name, item.id, item.media_type, results);
-            }
-        });
+    if (item.media_type === 'movie' || item.media_type === 'tv') {
+        const posterUrl = item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null;
+        renderCard(item.title || item.name, item.id, item.media_type, results, posterUrl);
+    }
+});
     }, 500);
 };
 
