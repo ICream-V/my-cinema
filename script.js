@@ -264,39 +264,45 @@ async function fetchTrakt(url, containerId, type, categoryLabel) {
 async function renderCard(title, id, type, container) {
     const card = document.createElement('div');
     card.className = 'card';
-    card.innerHTML = `<div class="poster"></div><div class="card-title">${title}</div>`;
+    
+    // 1. Create the structure with a placeholder for the poster
+    card.innerHTML = `
+        <div class="poster-container">
+            <div class="poster-placeholder">Loading...</div>
+        </div>
+        <div class="card-title">${title}</div>
+    `;
+    
+    // Set click handler
     card.onclick = () => showDetails(id, type);
     container.appendChild(card);
 
+    const posterWrapper = card.querySelector('.poster-container');
+
+    // 2. Check if we already have the URL in cache
     if (posterCache[id]) {
-        card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
-        return;
+        posterWrapper.innerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
+    } else {
+        // 3. Fetch from TMDB if missing (Common for Trakt/TMDB list items)
+        try {
+            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
+            const data = await res.json();
+            
+            if (data.poster_path) {
+                const posterUrl = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
+                posterCache[id] = posterUrl; // Save to cache for this session
+                posterWrapper.innerHTML = `<img class="poster" src="${posterUrl}" alt="${title}">`;
+            } else {
+                posterWrapper.innerHTML = `<div class="poster-placeholder">No Image</div>`;
+            }
+        } catch (err) {
+            console.error("Metadata fetch failed for ID:", id, err);
+            posterWrapper.innerHTML = `<div class="poster-placeholder">Error</div>`;
+        }
     }
 
-    try {
-        const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
-        const data = await res.json();
-        if (data.poster_path) {
-            posterCache[id] = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
-            card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
-        }
-    } catch (err) { console.error(err); }
-applyLibraryBadge(card, id, type);
-}
-
-function refreshLibraryBadges() {
-    document.querySelectorAll('.card').forEach(card => {
-        const onclick = card.getAttribute('onclick');
-        if (!onclick) return;
-
-        const match = onclick.match(/showDetails\((\d+), '(\w+)'\)/);
-        if (!match) return;
-
-        const id = match[1];
-        const type = match[2];
-
-        applyLibraryBadge(card, id, type);
-    });
+    // 4. Always apply the library badge (bookshelf icon) if applicable
+    applyLibraryBadge(card, id, type);
 }
 
 /* ================================
