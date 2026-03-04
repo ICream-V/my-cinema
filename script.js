@@ -188,9 +188,9 @@ function renderLibraryCard(item, container) {
     card.querySelector('.poster').onclick = () => showDetails(item.id, item.type);
     card.querySelector('.card-title').onclick = () => showDetails(item.id, item.type);
 
-    // Trash icon for removal
+    // Trash icon: ONLY for Library cards
     const trash = document.createElement('div');
-    trash.innerHTML = '🗑️'; // Can replace with other icon if desired
+    trash.innerHTML = '🗑️';
     trash.style.position = 'absolute';
     trash.style.top = '6px';
     trash.style.left = '6px';
@@ -200,9 +200,8 @@ function renderLibraryCard(item, container) {
     trash.style.borderRadius = '4px';
     trash.style.cursor = 'pointer';
     trash.title = 'Remove from Library';
-
     trash.onclick = (e) => {
-        e.stopPropagation(); // Prevent triggering showDetails
+        e.stopPropagation(); // prevent modal open
         const lib = getLibrary();
         const key = item.type === 'movie' ? 'movies' : 'tv';
         delete lib[key][item.id];
@@ -212,6 +211,9 @@ function renderLibraryCard(item, container) {
 
     card.style.position = 'relative';
     card.appendChild(trash);
+
+    // Library badge (optional, still applies if needed)
+    applyLibraryBadge(card, item.id, item.type);
 
     container.appendChild(card);
 }
@@ -261,69 +263,45 @@ async function fetchTrakt(url, containerId, type, categoryLabel) {
     } catch (err) { console.error(err); }
 }
 
-function renderCard(title, id, type, container, posterUrl = null) {
+async function renderCard(title, id, type, container, posterUrl = null) {
     const card = document.createElement('div');
     card.className = 'card';
-    
-    // Attach data attributes for easy badge handling
-    card.dataset.id = id;
-    card.dataset.type = type;
-
-    card.innerHTML = `
-        <div class="poster"></div>
-        <div class="card-title">${title}</div>
-    `;
-
-    // Click handlers for details
-    card.querySelector('.poster').onclick = () => showDetails(id, type);
-    card.querySelector('.card-title').onclick = () => showDetails(id, type);
-
-    // Trash icon (for library cards)
-    const trash = document.createElement('div');
-    trash.innerHTML = '🗑️';
-    trash.style.cssText = 'position:absolute; top:6px; left:6px; font-size:16px; background:rgba(0,0,0,0.6); padding:3px; border-radius:4px; cursor:pointer;';
-    trash.title = 'Remove from Library';
-    trash.onclick = (e) => {
-        e.stopPropagation();
-        const lib = getLibrary();
-        const key = type === 'movie' ? 'movies' : 'tv';
-        delete lib[key][id];
-        saveLibrary(lib);
-        container.removeChild(card);
-    };
-    card.style.position = 'relative';
-    card.appendChild(trash);
-
+    card.innerHTML = `<div class="poster"></div><div class="card-title">${title}</div>`;
+    card.onclick = () => showDetails(id, type);
     container.appendChild(card);
 
-    // Render poster
-    (async () => {
-    try {
-        let poster = posterUrl || posterCache[id];
-        if (!poster) {
+    // If poster is already cached or passed in, use it
+    if (!posterUrl && posterCache[id]) posterUrl = posterCache[id];
+
+    // Fetch poster from TMDB if not already known
+    if (!posterUrl) {
+        try {
             const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
             const data = await res.json();
 
-            // Determine correct title and poster based on type
             const mediaTitle = type === 'movie' ? data.title : data.name;
-            poster = data.poster_path ? `https://image.tmdb.org/t/p/w342${data.poster_path}` : null;
+            card.querySelector('.card-title').textContent = mediaTitle;
 
-            if (poster) posterCache[id] = poster;
-            card.querySelector('.card-title').textContent = mediaTitle; // Update title
+            if (data.poster_path) {
+                posterUrl = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
+                posterCache[id] = posterUrl;
+            }
+        } catch (err) {
+            console.error('Error fetching poster:', err);
         }
-
-        if (poster) {
-            const posterDiv = card.querySelector('.poster');
-            posterDiv.outerHTML = `<img class="poster" src="${poster}" alt="${title}">`;
-        }
-    } catch (err) {
-        console.error('Error fetching poster:', err);
-    } finally {
-        applyLibraryBadge(card, id, type);
     }
-})();
-}
 
+    // Apply poster if available
+    if (posterUrl) {
+        const posterDiv = card.querySelector('.poster');
+        posterDiv.outerHTML = `<img class="poster" src="${posterUrl}" alt="${title}">`;
+    }
+
+    // Library badge is global (shows if item exists in library)
+    applyLibraryBadge(card, id, type);
+
+    // NOTE: NO trash icon here — only library cards have it
+}
 function refreshLibraryBadges() {
     document.querySelectorAll('.card').forEach(card => {
         const id = card.dataset.id;
