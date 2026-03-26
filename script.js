@@ -264,45 +264,39 @@ async function fetchTrakt(url, containerId, type, categoryLabel) {
 async function renderCard(title, id, type, container) {
     const card = document.createElement('div');
     card.className = 'card';
-    
-    // 1. Create the structure with a placeholder for the poster
-    card.innerHTML = `
-        <div class="poster-container">
-            <div class="poster-placeholder">Loading...</div>
-        </div>
-        <div class="card-title">${title}</div>
-    `;
-    
-    // Set click handler
+    card.innerHTML = `<div class="poster"></div><div class="card-title">${title}</div>`;
     card.onclick = () => showDetails(id, type);
     container.appendChild(card);
 
-    const posterWrapper = card.querySelector('.poster-container');
-
-    // 2. Check if we already have the URL in cache
     if (posterCache[id]) {
-        posterWrapper.innerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
-    } else {
-        // 3. Fetch from TMDB if missing (Common for Trakt/TMDB list items)
-        try {
-            const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
-            const data = await res.json();
-            
-            if (data.poster_path) {
-                const posterUrl = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
-                posterCache[id] = posterUrl; // Save to cache for this session
-                posterWrapper.innerHTML = `<img class="poster" src="${posterUrl}" alt="${title}">`;
-            } else {
-                posterWrapper.innerHTML = `<div class="poster-placeholder">No Image</div>`;
-            }
-        } catch (err) {
-            console.error("Metadata fetch failed for ID:", id, err);
-            posterWrapper.innerHTML = `<div class="poster-placeholder">Error</div>`;
-        }
+        card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
+        return;
     }
 
-    // 4. Always apply the library badge (bookshelf icon) if applicable
-    applyLibraryBadge(card, id, type);
+    try {
+        const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${TMDB_KEY}`);
+        const data = await res.json();
+        if (data.poster_path) {
+            posterCache[id] = `https://image.tmdb.org/t/p/w342${data.poster_path}`;
+            card.querySelector('.poster').outerHTML = `<img class="poster" src="${posterCache[id]}" alt="${title}">`;
+        }
+    } catch (err) { console.error(err); }
+applyLibraryBadge(card, id, type);
+}
+
+function refreshLibraryBadges() {
+    document.querySelectorAll('.card').forEach(card => {
+        const onclick = card.getAttribute('onclick');
+        if (!onclick) return;
+
+        const match = onclick.match(/showDetails\((\d+), '(\w+)'\)/);
+        if (!match) return;
+
+        const id = match[1];
+        const type = match[2];
+
+        applyLibraryBadge(card, id, type);
+    });
 }
 
 /* ================================
@@ -545,39 +539,37 @@ async function loadTraktLists() {
     const body = document.getElementById('modal-body');
     body.innerHTML = '<h3>Trakt Lists</h3>';
 
-    // 1. Add Watchlist (System List)
-    const watchlistBtn = document.createElement('button');
-    watchlistBtn.className = 'list-btn';
-    watchlistBtn.textContent = "Watchlist";
-    watchlistBtn.onclick = () => openTraktSystemList('/users/me/watchlist/movies,shows');
-    body.appendChild(watchlistBtn);
+    /* --- System Lists --- */
+    const systemLists = [
+        { name: "Watchlist", endpoint: "/users/me/watchlist/movies,shows" }
+    ];
 
-    // 2. Fetch Custom Lists
-    try {
-        const res = await fetch('https://api.trakt.tv/users/me/lists', {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'trakt-api-version': '2',
-                'trakt-api-key': TRAKT_ID
-            }
-        });
+    systemLists.forEach(list => {
+        const btn = document.createElement('button');
+        btn.className = 'list-btn';
+        btn.textContent = list.name;
+        btn.onclick = () => openTraktSystemList(list.endpoint);
+        body.appendChild(btn);
+    });
 
-        if (!res.ok) throw new Error("Trakt API error");
+    /* --- Custom Lists --- */
+    const res = await fetch('https://api.trakt.tv/users/me/lists', {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'trakt-api-version': '2',
+            'trakt-api-key': TRAKT_ID
+        }
+    });
 
-        const lists = await res.json();
+    const lists = await res.json();
 
-        lists.forEach(list => {
-            const btn = document.createElement('button');
-            btn.className = 'list-btn';
-            // Custom lists use the 'slug' for the URL but 'name' for the label
-            btn.textContent = `${list.name} (${list.item_count || 0})`;
-            btn.onclick = () => openTraktCustomList(list.ids.slug);
-            body.appendChild(btn);
-        });
-    } catch (err) {
-        console.error("Failed to load Trakt lists", err);
-        body.innerHTML += '<p style="color:red; padding:10px;">Error loading custom lists.</p>';
-    }
+    lists.forEach(list => {
+        const btn = document.createElement('button');
+        btn.className = 'list-btn';
+        btn.textContent = `${list.name} (${list.item_count})`;
+        btn.onclick = () => openTraktCustomList(list.ids.slug);
+        body.appendChild(btn);
+    });
 }
 
 async function openTraktSystemList(endpoint) {
@@ -606,48 +598,38 @@ async function openTraktCustomList(slug) {
     const body = document.getElementById('modal-body');
 
     body.innerHTML = `
-        <h3 style="display:flex; align-items:center; gap:10px;">
-            <span onclick="loadTraktLists()" style="cursor:pointer;">⬅️</span> 
-            Loading List...
-        </h3>
+        <h3>Loading...</h3>
         <div class="grid" id="modal-grid"></div>
     `;
 
-    try {
-        const res = await fetch(`https://api.trakt.tv/users/me/lists/${slug}/items`, {
+    const res = await fetch(
+        `https://api.trakt.tv/users/me/lists/${slug}/items`,
+        {
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'trakt-api-version': '2',
                 'trakt-api-key': TRAKT_ID
             }
-        });
+        }
+    );
 
-        const items = await res.json();
-        renderTraktItems(items);
-    } catch (err) {
-        console.error("Error fetching list items", err);
-        document.getElementById('modal-grid').innerHTML = '<p>Error loading items.</p>';
-    }
+    const items = await res.json();
+    renderTraktItems(items);
 }
 
 function renderTraktItems(items) {
     const grid = document.getElementById('modal-grid');
-    if (!grid) return;
     grid.innerHTML = '';
 
-    if (!items || items.length === 0) {
-        grid.innerHTML = '<p style="color:gray; padding:20px;">No items found in this list.</p>';
-        return;
-    }
-
     items.forEach(item => {
-        // Trakt's nested structure
         const media = item.movie || item.show;
-        // Map 'show' to 'tv' for TMDB poster fetching
-        const type = item.movie ? 'movie' : 'tv';
-
-        if (media && media.ids && media.ids.tmdb) {
-            renderCard(media.title || media.name, media.ids.tmdb, type, grid);
+        if (media?.ids?.tmdb) {
+            renderCard(
+                media.title || media.name,
+                media.ids.tmdb,
+                item.type || (item.movie ? 'movie' : 'tv'),
+                grid
+            );
         }
     });
 }
